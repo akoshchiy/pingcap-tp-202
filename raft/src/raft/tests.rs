@@ -61,6 +61,7 @@ fn test_reelection_2a() {
     let leader1 = cfg.check_one_leader();
     // if the leader disconnects, a new one should be elected.
     cfg.disconnect(leader1);
+    info!("disconnecting leader");
     cfg.check_one_leader();
 
     // if the old leader rejoins, that shouldn't
@@ -106,6 +107,8 @@ fn test_many_election_2a() {
         cfg.disconnect(i2);
         cfg.disconnect(i3);
 
+        info!("disconnecting [{}, {}, {}]", i1, i2, i3);
+
         // either the current leader should still be alive,
         // or the remaining four should elect a new one.
         cfg.check_one_leader();
@@ -113,6 +116,8 @@ fn test_many_election_2a() {
         cfg.connect(i1);
         cfg.connect(i2);
         cfg.connect(i3);
+
+        info!("connecting [{}, {}, {}]", i1, i2, i3);
     }
 
     cfg.check_one_leader();

@@ -1,5 +1,6 @@
 # export RUSTFLAGS=-Dwarnings
 export RUST_TEST_THREADS=1
+export LOG_LEVEL=info
 export RUST_BACKTRACE=1
 
 LOG_LEVEL ?= raft=info,percolator=info
