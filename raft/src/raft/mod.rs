@@ -1,3 +1,5 @@
+use std::cmp::max;
+use std::detect::__is_feature_detected::sha;
 use std::future::Future;
 use std::ops::{Add, Deref};
 use std::os::macos::raw::stat;
@@ -17,6 +19,7 @@ use futures::task::SpawnExt;
 use futures_timer::Delay;
 use rand::Rng;
 use labrpc::Client;
+use linearizability::models::Op;
 
 #[cfg(test)]
 pub mod config;
@@ -28,6 +31,7 @@ mod tests;
 use self::errors::*;
 use self::persister::*;
 use crate::proto::raftpb::*;
+use crate::raft::PeerStatus::Leader;
 
 
 /// As each Raft peer becomes aware that successive log entries are committed,
@@ -50,10 +54,11 @@ pub enum ApplyMsg {
 #[derive(Clone, Debug)]
 pub struct State {
     pub term: u64,
-    pub is_leader: bool,
+    pub status: PeerStatus,
     pub me: usize,
     pub voted_for: Option<Vote>,
-    pub heartbeat_time: SystemTime,
+    pub received_heartbeat_time: Option<SystemTime>,
+    pub sent_heartbeat_time: Option<SystemTime>,
 }
 
 impl State {
@@ -63,7 +68,7 @@ impl State {
     }
     /// Whether this peer believes it is the leader.
     pub fn is_leader(&self) -> bool {
-        self.is_leader
+        self.status == PeerStatus::Leader
     }
 }
 
@@ -71,6 +76,13 @@ impl State {
 pub struct Vote {
     peer: usize,
     term: u64,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum PeerStatus {
+    Follower,
+    Candidate,
+    Leader
 }
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(150);
@@ -94,10 +106,12 @@ struct Shared {
     // Look at the paper's Figure 2 for a description of what
     // state a Raft server must maintain.
 
+    status: PeerStatus,
     term: u64,
     is_leader: bool,
     voted_for: Option<Vote>,
-    heartbeat_time: SystemTime,
+    received_heartbeat_time: Option<SystemTime>,
+    sent_heartbeat_time: Option<SystemTime>,
     // apply_ch: UnboundedSender<ApplyMsg>,
 }
 
@@ -105,38 +119,39 @@ impl Shared {
     fn get_state(&self) -> State {
         State {
             term: self.term,
-            is_leader: self.is_leader,
+            status: self.status,
             me: self.me,
-            voted_for:  self.voted_for,
-            heartbeat_time: self.heartbeat_time,
+            voted_for: self.voted_for,
+            received_heartbeat_time: self.received_heartbeat_time,
+            sent_heartbeat_time: self.sent_heartbeat_time,
         }
     }
 
-    fn inc_term(&mut self) -> State {
+    fn inc_term(&mut self) {
         self.term += 1;
-        self.get_state()
     }
 
-    fn mark_as_leader(&mut self, leader: bool, term: u64) {
-        self.is_leader = leader;
-        self.term = term;
-        if !leader {
-            self.heartbeat_time = SystemTime::now();
-        }
+    fn update_status(&mut self, status: PeerStatus) {
+        self.status = status;
     }
 
-    fn update_heartbeat(&mut self, term: u64) {
-        self.heartbeat_time = SystemTime::now();
+    fn update_received_heartbeat(&mut self) {
+        self.received_heartbeat_time = Option::Some(SystemTime::now());
+    }
+
+    fn update_sent_heartbeat(&mut self) {
+        self.sent_heartbeat_time = Option::Some(SystemTime::now());
+    }
+
+    fn update_term(&mut self, term: u64) {
         self.term = term;
     }
 
     fn vote_for(&mut self, term: u64, candidate_id: usize) {
-        self.term = term;
         self.voted_for = Option::Some(Vote {
             peer: candidate_id,
             term
         });
-        self.heartbeat_time = SystemTime::now();
     }
 }
 
@@ -162,9 +177,11 @@ impl Raft {
             shared: Mutex::new(Shared {
                 me,
                 term: 0,
+                status: PeerStatus::Follower,
                 is_leader: false,
                 voted_for: Option::None,
-                heartbeat_time: SystemTime::now(),
+                received_heartbeat_time: Option::None,
+                sent_heartbeat_time: Option::None,
             }),
             peers,
             persister: Mutex::new(persister),
@@ -178,29 +195,17 @@ impl Raft {
         rf
     }
 
-    fn get_state(&self) -> State {
-        let shared = self.shared.lock().unwrap();
+    fn update_shared<F>(&self, mut f: F) -> State
+        where F: Fn(&mut Shared) -> ()
+    {
+        let mut shared = self.shared.lock().unwrap();
+        f(&mut shared);
         shared.get_state()
     }
 
-    fn inc_term(&self) -> State {
-        let mut shared = self.shared.lock().unwrap();
-        shared.inc_term()
-    }
-
-    fn mark_as_leader(&self, leader: bool, term: u64) {
-        let mut shared = self.shared.lock().unwrap();
-        shared.mark_as_leader(leader, term);
-    }
-
-    fn vote_for(&self, term: u64, candidate_id: usize) {
-        let mut shared = self.shared.lock().unwrap();
-        shared.vote_for(term, candidate_id);
-    }
-
-    fn update_heartbeat(&self, term: u64) {
-        let mut shared = self.shared.lock().unwrap();
-        shared.update_heartbeat(term);
+    fn get_state(&self) -> State {
+        let shared = self.shared.lock().unwrap();
+        shared.get_state()
     }
 
     fn handle_request_vote(&self, args: RequestVoteArgs) -> RequestVoteReply {
@@ -216,19 +221,25 @@ impl Raft {
             };
         }
 
-        let candidate_id = args.candidate_id as usize;
-
         let already_voted = state.voted_for
             .map(|v| v.term >= args.term)
             .unwrap_or(false);
 
-        if !already_voted {
-            self.vote_for(args.term, candidate_id);
-            self.mark_as_leader(false, args.term);
+        let already_candidate =
+            state.status == PeerStatus::Candidate && state.term >= args.term;
+
+        if !already_voted && !already_candidate {
+            self.update_shared(|s| {
+                s.update_term(args.term);
+                s.vote_for(args.term, args.candidate_id as usize);
+                s.update_status(PeerStatus::Follower);
+                s.update_received_heartbeat();
+            });
         }
 
         info!("peer#{} - request_vote, my term: {}, candidate_term: {}, candidate_id: {}, {}",
-                state.me, state.term, args.term, args.candidate_id, if !already_voted {"approve"} else {"reject"}
+                state.me, state.term, args.term, args.candidate_id,
+            if !already_voted {"approve"} else {"reject"}
         );
 
         RequestVoteReply {
@@ -248,7 +259,11 @@ impl Raft {
             }
         }
 
-        self.update_heartbeat(args.term);
+        self.update_shared(|s| {
+            s.update_received_heartbeat();
+            s.update_term(args.term);
+            s.update_status(PeerStatus::Follower);
+        });
 
         AppendEntriesReply {
             peer: state.me as u32,
@@ -262,17 +277,25 @@ impl Raft {
 
         let state = self.get_state();
 
-        if state.is_leader {
+        if state.is_leader() {
             return;
         }
 
-        let duration_since_heartbeat = now
-            .duration_since(state.heartbeat_time)
-            .unwrap();
+        let duration_since = state
+            .received_heartbeat_time
+            .map(|t| now.duration_since(t).unwrap());
 
-        if !state.is_leader && duration_since_heartbeat > ELECTION_TIMEOUT {
+        let expired = duration_since
+            .map(|d| d > ELECTION_TIMEOUT)
+            .unwrap_or(true);
+
+        if expired {
+            let dur_ms = duration_since
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
             info!("peer#{} - last heartbeat: {}, initiating new vote",
-                state.me, duration_since_heartbeat.as_millis());
+                state.me, dur_ms);
+
             self.initiate_vote().await;
         }
     }
@@ -280,11 +303,22 @@ impl Raft {
     async fn send_heartbeat(&self) {
         let state = self.get_state();
 
-        if !state.is_leader {
+        if !state.is_leader() {
+            return;
+        }
+
+        let skip_heartbeat = state.sent_heartbeat_time
+            .map(|t|  SystemTime::now().duration_since(t).unwrap())
+            .map(|d| d < HEARTBEAT_INTERVAL)
+            .unwrap_or(false);
+
+        if skip_heartbeat {
             return;
         }
 
         info!("peer#{} - try send heartbeat, term: {}", state.me, state.term);
+
+        self.update_shared(|s| s.update_sent_heartbeat());
 
         let futures: FuturesUnordered<_> = self.peers.iter()
             .enumerate()
@@ -297,28 +331,57 @@ impl Raft {
             })
             .collect();
 
+        let ctx = HeartbeatCtx {
+            me: state.me,
+            failed_count: AtomicUsize::new(0),
+            quorum: self.peers.len() / 2 + 1,
+        };
+
         futures.for_each_concurrent(None, |resp| async {
             match resp {
-                Ok(reply) => {
-                    if !reply.success {
-                        info!("peer#{} - heartbeat reject, loosing leadership, peer: {}, term: {}",
-                            state.me, reply.peer, reply.term);
-                        self.mark_as_leader(false, reply.term);
-                    }
-                },
-                Err(err) => {
-                    warn!("peer#{} - send_heartbeat error resp: {}", state.me, err.to_string());
-                },
+                Ok(reply) => self.handle_heartbeat_reply(reply, &ctx),
+                Err(err) => self.handle_heartbeat_error(err, &ctx),
             }
         }).await;
     }
 
-    async fn initiate_vote(&self) {
-        let state = self.inc_term();
-
-        if state.is_leader {
+    fn handle_heartbeat_reply(&self, reply: AppendEntriesReply, ctx: &HeartbeatCtx) {
+        if reply.success {
             return;
         }
+
+        info!("peer#{} - heartbeat reject, loosing leadership, peer: {}, term: {}",
+                            ctx.me, reply.peer, reply.term);
+
+        self.update_shared(|s| {
+            s.update_status(PeerStatus::Follower);
+            s.update_term(reply.term);
+        });
+    }
+
+    fn handle_heartbeat_error(&self, err: Error, ctx: &HeartbeatCtx) {
+        warn!("peer#{} - send_heartbeat error resp: {}", ctx.me, err.to_string());
+        ctx.inc_failed_count();
+
+        if ctx.get_failed_count() >= ctx.quorum {
+            info!("peer#{} - send_heartbeat error quorum, loosing leadership", ctx.me);
+            self.update_shared(|s| {
+                s.update_status(PeerStatus::Follower);
+            });
+        }
+    }
+
+    async fn initiate_vote(&self) {
+        let state = self.get_state();
+
+        if state.is_leader() {
+            return;
+        }
+
+        let state = self.update_shared(|s| {
+            s.inc_term();
+            s.update_status(PeerStatus::Candidate);
+        });
 
         let futures: FuturesUnordered<_> = self.peers.iter()
             .enumerate()
@@ -331,41 +394,48 @@ impl Raft {
             })
             .collect();
 
-        let approved_count = AtomicUsize::new(1);
-        let quorum = self.peers.len() / 2 + 1;
+        let ctx = VoteCtx {
+            me: state.me,
+            term: state.term,
+            approved_count: AtomicUsize::new(1),
+            quorum: self.peers.len() / 2 + 1,
+            approved: AtomicBool::new(false)
+        };
 
-        let approved = AtomicBool::new(false);
-
-        futures.for_each_concurrent(None, |resp| {
-            async {
-                match resp {
-                    Ok(reply) => {
-                        if reply.vote_granted {
-                            approved_count.fetch_add(1, Ordering::SeqCst);
-                            let count = approved_count.load(Ordering::SeqCst);
-
-                            info!("peer#{} - received vote approve, current: {}", state.me, count);
-
-                            if count >= quorum {
-                                if !approved.load(Ordering::SeqCst) {
-                                    info!("peer#{} - received quorum approves, i am leader", state.me);
-                                    self.mark_as_leader(true, state.term);
-                                    approved.store(true, Ordering::SeqCst);
-                                }
-                            }
-                        } else {
-                            info!("peer#{} - received vote reject, my.term: {}, resp.term: {}",
-                                state.me, state.term, reply.term);
-                        }
-                    },
-                    Err(err) => {
-                        warn!("peer#{} - request_vote error resp: {}", state.me, err.to_string());
-                    }
-                }
+        futures.for_each_concurrent(None, |resp| async {
+            match resp {
+                Ok(reply) => self.handle_vote_reply(reply, &ctx),
+                Err(err) =>
+                    warn!("peer#{} - request_vote[term={}] error resp: {}", ctx.me, ctx.term, err.to_string()),
             }
         }).await;
     }
 
+    fn handle_vote_reply(&self, reply: RequestVoteReply, ctx: &VoteCtx) {
+        if !reply.vote_granted {
+            info!("peer#{} - received vote reject, my.term: {}, resp.term: {}",
+                                ctx.me, ctx.term, reply.term);
+            return;
+        }
+
+        ctx.inc_approved_count();
+        let count = ctx.get_approved_count();
+
+        info!("peer#{} - received vote approve, current: {}", ctx.me, count);
+
+        if count >= ctx.quorum {
+            if !ctx.is_approved() {
+                info!("peer#{} - received quorum approves, i am leader, term={}",
+                                        ctx.me, ctx.term);
+
+                self.update_shared(|s| {
+                    s.update_status(PeerStatus::Leader);
+                });
+
+                ctx.set_approved();
+            }
+        }
+    }
 
     /// save Raft's persistent state to stable storage,
     /// where it can later be retrieved after a crash and restart.
@@ -433,6 +503,12 @@ impl Raft {
         where
             M: labcodec::Message,
     {
+        let state = self.get_state();
+
+        if !state.is_leader() {
+            return Err(Error::NotLeader);
+        }
+
         let index = 0;
         let term = 0;
         let is_leader = true;
@@ -503,25 +579,7 @@ impl Node {
     /// Create a new raft service.
     pub fn new(raft: Raft) -> Node {
         let pool = TaskPool::new(1);
-        //
         let raft = Arc::new(raft);
-
-        // let raft_clone = raft.clone();
-        // pool.spawn_loop(HEARTBEAT_INTERVAL, move || {
-        //     let raft_clone = raft_clone.clone();
-        //     async move {
-        //         raft_clone.send_heartbeat().await;
-        //     }
-        // });
-        //
-        // let raft_clone = raft.clone();
-        //
-        // pool.spawn_loop(randomize_duration(ELECTION_TIMEOUT), move || {
-        //     let raft_clone = raft_clone.clone();
-        //     async move {
-        //         raft_clone.check_leader_heartbeat().await;
-        //     }
-        // });
 
         Node::spawn_tasks(raft.clone(), pool.clone());
 
@@ -535,7 +593,23 @@ impl Node {
         let raft_clone = raft.clone();
         let pool_clone = pool.clone();
 
-        pool.spawn_loop(HEARTBEAT_INTERVAL, move || {
+        let delay_fn = move || {
+            raft_clone.get_state()
+                .sent_heartbeat_time
+                .map(|t| SystemTime::now().duration_since(t).unwrap())
+                .map(|d| {
+                    if d > HEARTBEAT_INTERVAL {
+                        Duration::from_millis(0)
+                    } else {
+                        HEARTBEAT_INTERVAL - d
+                    }
+                })
+                .unwrap_or(HEARTBEAT_INTERVAL)
+        };
+
+        let raft_clone = raft.clone();
+
+        pool.spawn_loop(delay_fn, move || {
             let raft_clone = raft_clone.clone();
             let pool_clone = pool_clone.clone();
             async move {
@@ -548,7 +622,7 @@ impl Node {
         let raft_clone = raft.clone();
         let pool_clone = pool.clone();
 
-        pool.spawn_loop(randomize_duration(ELECTION_TIMEOUT), move || {
+        pool.spawn_loop(|| randomize_duration(ELECTION_TIMEOUT), move || {
             let raft_clone = raft_clone.clone();
             let pool_clone = pool_clone.clone();
             async move {
@@ -575,10 +649,7 @@ impl Node {
         where
             M: labcodec::Message,
     {
-        // Your code here.
-        // Example:
-        // self.raft.start(command)
-        crate::your_code_here(command)
+        self.raft.start(command)
     }
 
     /// The current term of this peer.
@@ -686,25 +757,21 @@ impl TaskPool {
         self.pool.spawn_ok(future)
     }
 
-    fn spawn_loop<F, T>(&self, delay: Duration, task: T)
+    fn spawn_loop<D, F, T>(&self, delay_fn: D, task: T)
         where
+            D: (Fn() -> Duration) + Send + 'static,
             F: Future + Send + 'static,
             T: (Fn() -> F) + Send + 'static
     {
         let mut tasks = self.tasks.lock().unwrap();
-
         let (wait_sender, wait_recv) = oneshot::channel();
-
         let stop = self.stop.clone();
-
         self.pool.spawn_ok(
-            TaskPool::task_loop(delay, stop, wait_sender, task)
+            TaskPool::task_loop(delay_fn, stop, wait_sender, task)
         );
-
         let handle = TaskHandle {
             wait_ch: wait_recv,
         };
-
         tasks.push(handle);
     }
 
@@ -719,13 +786,20 @@ impl TaskPool {
         }
     }
 
-    async fn task_loop<F, T>(delay: Duration, stop: Arc<AtomicBool>, _wait_ch: oneshot::Sender<()>, task: T)
+    async fn task_loop<D, F, T>(
+        delay_fn: D,
+        stop: Arc<AtomicBool>,
+        _wait_ch: oneshot::Sender<()>,
+        task: T
+    )
         where
+            D: (Fn() -> Duration) + Send + 'static,
             F: Future + Send + 'static,
             T: (Fn() -> F) + Send + 'static
     {
         while stop.load(Ordering::SeqCst) != true {
-            Delay::new(delay).await;
+            let duration = delay_fn();
+            Delay::new(duration).await;
             let task_fut = task();
             task_fut.await;
         }
@@ -735,4 +809,47 @@ impl TaskPool {
 fn randomize_duration(duration: Duration) -> Duration {
     let offset: u64 = rand::thread_rng().gen_range(0, 200);
     duration.add(Duration::from_millis(offset))
+}
+
+struct HeartbeatCtx {
+    me: usize,
+    failed_count: AtomicUsize,
+    quorum: usize,
+}
+
+impl HeartbeatCtx {
+
+    fn get_failed_count(&self) -> usize {
+        self.failed_count.load(Ordering::SeqCst)
+    }
+
+    fn inc_failed_count(&self) {
+        self.failed_count.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+struct VoteCtx {
+    me: usize,
+    term: u64,
+    approved_count: AtomicUsize,
+    quorum: usize,
+    approved: AtomicBool,
+}
+
+impl VoteCtx {
+    fn is_approved(&self) -> bool {
+        self.approved.load(Ordering::SeqCst)
+    }
+
+    fn set_approved(&self) {
+        self.approved.store(true, Ordering::SeqCst);
+    }
+
+    fn get_approved_count(&self) -> usize {
+        self.approved_count.load(Ordering::SeqCst)
+    }
+
+    fn inc_approved_count(&self) {
+        self.approved_count.fetch_add(1, Ordering::SeqCst);
+    }
 }

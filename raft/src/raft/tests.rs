@@ -61,27 +61,34 @@ fn test_reelection_2a() {
     let leader1 = cfg.check_one_leader();
     // if the leader disconnects, a new one should be elected.
     cfg.disconnect(leader1);
-    info!("disconnecting leader");
+    info!("disconnecting leader - peer#{}", leader1);
     cfg.check_one_leader();
 
     // if the old leader rejoins, that shouldn't
     // disturb the new leader.
     cfg.connect(leader1);
+    info!("connecting ex leader - peer#{}", leader1);
+
     let leader2 = cfg.check_one_leader();
 
     // if there's no quorum, no leader should
     // be elected.
     cfg.disconnect(leader2);
     cfg.disconnect((leader2 + 1) % servers);
+    info!("disconnecting [peer#{}, peer#{}]", leader2, (leader2 + 1) % servers);
+
     thread::sleep(2 * RAFT_ELECTION_TIMEOUT);
     cfg.check_no_leader();
 
     // if a quorum arises, it should elect a leader.
     cfg.connect((leader2 + 1) % servers);
+    info!("connecting [peer#{}]", (leader2 + 1) % servers);
     cfg.check_one_leader();
 
     // re-join of last node shouldn't prevent leader from existing.
     cfg.connect(leader2);
+    info!("connecting [peer#{}]", leader2);
+
     cfg.check_one_leader();
 
     cfg.end();
