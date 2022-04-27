@@ -1,3 +1,4 @@
+use core::panicking::panic;
 use std::cmp::max;
 use std::detect::__is_feature_detected::sha;
 use std::future::Future;
@@ -17,6 +18,8 @@ use futures::channel::oneshot::{Receiver, Sender};
 use futures::stream::FuturesUnordered;
 use futures::task::SpawnExt;
 use futures_timer::Delay;
+use log::Log;
+use prost::encoding::float::encoded_len;
 use rand::Rng;
 use labrpc::Client;
 use linearizability::models::Op;
@@ -59,6 +62,8 @@ pub struct State {
     pub voted_for: Option<Vote>,
     pub received_heartbeat_time: Option<SystemTime>,
     pub sent_heartbeat_time: Option<SystemTime>,
+    pub commit_idx: usize,
+    pub last_applied: usize,
 }
 
 impl State {
@@ -97,8 +102,13 @@ pub struct Raft {
     persister: Mutex<Box<dyn Persister>>,
 }
 
-struct Shared {
+#[derive(Debug)]
+struct LogEntry {
+    term: u64,
+    data: Vec<u8>,
+}
 
+struct Shared {
     // this peer's index into peers[]
     me: usize,
     // state: Arc<State>,
@@ -108,11 +118,13 @@ struct Shared {
 
     status: PeerStatus,
     term: u64,
-    is_leader: bool,
     voted_for: Option<Vote>,
     received_heartbeat_time: Option<SystemTime>,
     sent_heartbeat_time: Option<SystemTime>,
-    // apply_ch: UnboundedSender<ApplyMsg>,
+    commit_idx: usize,
+    last_applied: usize,
+    logs: Vec<LogEntry>,
+    apply_ch: UnboundedSender<ApplyMsg>,
 }
 
 impl Shared {
@@ -124,11 +136,45 @@ impl Shared {
             voted_for: self.voted_for,
             received_heartbeat_time: self.received_heartbeat_time,
             sent_heartbeat_time: self.sent_heartbeat_time,
+            commit_idx: self.commit_idx,
+            last_applied: self.last_applied,
         }
     }
 
     fn inc_term(&mut self) {
         self.term += 1;
+    }
+
+    fn append_entry(&mut self, data: Vec<u8>) {
+        let entry = LogEntry {
+            term: self.term as u64,
+            data,
+        };
+        self.logs.push(entry);
+    }
+
+    fn update_entry(&mut self, idx: usize, entry: LogEntry) {
+        if idx > self.logs.len() {
+            panic!("");
+        }
+        self.logs[idx - 1] = entry;
+    }
+
+    fn get_log_entry(&self, idx: usize) -> Option<&LogEntry> {
+        self.logs.get(idx - 1)
+    }
+
+    fn get_logs_size(&self) -> usize {
+        self.logs.len()
+    }
+
+    fn get_last_entry_info(&self) -> (u64, u64) {
+        if self.logs.is_empty() {
+            return (0, 0);
+        }
+        let idx = self.logs.len();
+        let entry = &self.logs[self.logs.len() - 1];
+        (idx as u64, entry.term)
     }
 
     fn update_status(&mut self, status: PeerStatus) {
@@ -168,7 +214,7 @@ impl Raft {
         peers: Vec<RaftClient>,
         me: usize,
         persister: Box<dyn Persister>,
-        _apply_ch: UnboundedSender<ApplyMsg>,
+        apply_ch: UnboundedSender<ApplyMsg>,
     ) -> Raft {
         let raft_state = persister.raft_state();
 
@@ -178,10 +224,13 @@ impl Raft {
                 me,
                 term: 0,
                 status: PeerStatus::Follower,
-                is_leader: false,
                 voted_for: Option::None,
                 received_heartbeat_time: Option::None,
                 sent_heartbeat_time: Option::None,
+                commit_idx: 0,
+                last_applied: 0,
+                logs: Vec::new(),
+                apply_ch,
             }),
             peers,
             persister: Mutex::new(persister),
@@ -195,17 +244,30 @@ impl Raft {
         rf
     }
 
-    fn update_shared<F>(&self, mut f: F) -> State
-        where F: Fn(&mut Shared) -> ()
+    fn update_shared<F, R>(&self, f: F) -> R
+        where F: Fn(&mut Shared) -> R
     {
         let mut shared = self.shared.lock().unwrap();
-        f(&mut shared);
-        shared.get_state()
+        f(&mut shared)
     }
 
     fn get_state(&self) -> State {
+        self.extract(|s| s.get_state())
+    }
+
+    fn is_leader(&self) -> bool {
+        self.extract(|s| s.status == PeerStatus::Leader)
+    }
+
+    fn get_me(&self) -> usize {
+        self.extract(|s| s.me)
+    }
+
+    fn extract<F, R>(&self, extractor: F) -> R
+        where F: Fn(&Shared) -> R
+    {
         let shared = self.shared.lock().unwrap();
-        shared.get_state()
+        extractor(&shared)
     }
 
     fn handle_request_vote(&self, args: RequestVoteArgs) -> RequestVoteReply {
@@ -249,6 +311,71 @@ impl Raft {
     }
 
     fn handle_append_entries(&self, args: AppendEntriesArgs) -> AppendEntriesReply {
+        self.handle_heartbeat(args)
+
+        // if args.entries.is_empty() {
+        //     self.handle_heartbeat(args)
+        // } else {
+        //     self.handle_new_entries(args)
+        // }
+    }
+
+    fn handle_new_entries(&self, args: AppendEntriesArgs) -> AppendEntriesReply {
+        return self.update_shared(|shared| {
+            if shared.term > args.term {
+                return AppendEntriesReply {
+                    peer: shared.me as u32,
+                    term: shared.term,
+                    success: false
+                }
+            }
+
+            shared.update_received_heartbeat();
+            shared.update_term(args.term);
+            shared.update_status(PeerStatus::Follower);
+
+            let has_conflict = shared.logs.get(args.prev_log_idx as usize)
+                .map(|e| e.term != args.prev_log_term)
+                .unwrap_or(true);
+
+            if has_conflict {
+                return AppendEntriesReply {
+                    peer: shared.me as u32,
+                    term: shared.term,
+                    success: false
+                }
+            }
+
+            for idx in args.prev_log_idx..args.entries.len() {
+                if idx > shared.get_logs_size() {
+                    shared.append_entry(LogEntry {
+                        data: a
+                    })
+                }
+
+
+
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            unimplemented!()
+        });
+    }
+
+    fn handle_heartbeat(&self, args: AppendEntriesArgs) -> AppendEntriesReply {
         let state = self.get_state();
 
         if state.term > args.term {
@@ -320,14 +447,20 @@ impl Raft {
 
         self.update_shared(|s| s.update_sent_heartbeat());
 
+        let args = AppendEntriesArgs {
+            term: state.term,
+            leader_id: state.me as u32,
+            entries: Vec::with_capacity(0),
+            leader_commit: 0,
+            prev_log_idx: 0,
+            prev_log_term: 0,
+        };
+
         let futures: FuturesUnordered<_> = self.peers.iter()
             .enumerate()
             .filter(|p| p.0 != state.me)
             .map(|p| {
-                self.send_append_entries(p.1, AppendEntriesArgs {
-                    term: state.term,
-                    leader_id: state.me as u32
-                })
+                self.send_append_entries(p.1, &args)
             })
             .collect();
 
@@ -381,7 +514,13 @@ impl Raft {
         let state = self.update_shared(|s| {
             s.inc_term();
             s.update_status(PeerStatus::Candidate);
+            s.get_state()
         });
+
+        let args = RequestVoteArgs {
+            term: state.term,
+            candidate_id: state.me as u32,
+        };
 
         let futures: FuturesUnordered<_> = self.peers.iter()
             .enumerate()
@@ -423,17 +562,15 @@ impl Raft {
 
         info!("peer#{} - received vote approve, current: {}", ctx.me, count);
 
-        if count >= ctx.quorum {
-            if !ctx.is_approved() {
-                info!("peer#{} - received quorum approves, i am leader, term={}",
+        if count >= ctx.quorum && !ctx.is_approved() {
+            info!("peer#{} - received quorum approves, i am leader, term={}",
                                         ctx.me, ctx.term);
 
-                self.update_shared(|s| {
-                    s.update_status(PeerStatus::Leader);
-                });
+            self.update_shared(|s| {
+                s.update_status(PeerStatus::Leader);
+            });
 
-                ctx.set_approved();
-            }
+            ctx.set_approved();
         }
     }
 
@@ -486,41 +623,79 @@ impl Raft {
     async fn send_request_vote(
         &self,
         peer: &RaftClient,
-        args: RequestVoteArgs,
+        args: &RequestVoteArgs,
     ) -> Result<RequestVoteReply> {
-        peer.request_vote(&args).await.map_err(Error::Rpc)
+        peer.request_vote(args).await.map_err(Error::Rpc)
     }
 
     async fn send_append_entries(
         &self,
         peer: &RaftClient,
-        args: AppendEntriesArgs,
+        args: &AppendEntriesArgs,
     ) -> Result<AppendEntriesReply> {
-        peer.append_entries(&args).await.map_err(Error::Rpc)
+        peer.append_entries(args).await.map_err(Error::Rpc)
     }
 
-    fn start<M>(&self, command: &M) -> Result<(u64, u64)>
+    fn append_command<M>(&self, command: &M) -> Result<AppendLogResult>
         where
             M: labcodec::Message,
     {
-        let state = self.get_state();
-
-        if !state.is_leader() {
+        if !self.is_leader() {
             return Err(Error::NotLeader);
         }
 
-        let index = 0;
-        let term = 0;
-        let is_leader = true;
         let mut buf = vec![];
         labcodec::encode(command, &mut buf).map_err(Error::Encode)?;
-        // Your code here (2B).
 
-        if is_leader {
-            Ok((index, term))
-        } else {
-            Err(Error::NotLeader)
+        let (term, idx, prev_term, prev_idx) = self.update_shared(|s| {
+            let prev_info = s.get_last_entry_info();
+            s.append_entry(buf.clone());
+            let current_info = s.get_last_entry_info();
+            (current_info.1, current_info.0, prev_info.1, prev_info.0)
+        });
+
+        Ok(AppendLogResult {
+            term,
+            prev_term,
+            prev_idx,
+            idx,
+            data: buf,
+        })
+    }
+
+    async fn replicate_entries(
+        &self,
+        peer: usize,
+        ctx: Arc<ReplicateEntriesCtx>,
+        append_result: AppendLogResult
+    ) {
+        let state = self.get_state();
+
+        let args = AppendEntriesArgs {
+            term: append_result.term,
+            leader_id: state.me as u32,
+            entries: vec![EntryItem {
+                term: append_result.term,
+                data: append_result.data,
+            }],
+            leader_commit: state.commit_idx as u64,
+            prev_log_idx: append_result.prev_idx,
+            prev_log_term: append_result.prev_term,
+        };
+
+        let result = self.send_append_entries(&self.peers[peer], &args).await;
+
+        match result {
+            Ok(reply) => {
+
+
+            },
+            Err(err) => {},
         }
+    }
+
+    fn handle_replicate_entries_resp(&self) {
+
     }
 
     fn cond_install_snapshot(
@@ -649,7 +824,30 @@ impl Node {
         where
             M: labcodec::Message,
     {
-        self.raft.start(command)
+        let append_result = self.raft.append_command(command)?;
+        let idx = append_result.idx;
+        let term = append_result.term;
+        let me = self.raft.get_me();
+
+        let ctx = Arc::new(ReplicateEntriesCtx {
+            commit_succeed: AtomicBool::new(false),
+            replicate_count: AtomicUsize::new(0),
+        });
+
+        for peer in 0..self.raft.peers.len() {
+            if peer == me {
+                continue;
+            }
+            let raft = self.raft.clone();
+            let append_result = append_result.clone();
+            let ctx = ctx.clone();
+
+            self.pool.spawn(async move {
+                raft.replicate_entries(peer, ctx, append_result).await;
+            });
+        }
+
+        Ok((idx, term))
     }
 
     /// The current term of this peer.
@@ -661,7 +859,7 @@ impl Node {
     /// Whether this peer believes it is the leader.
     pub fn is_leader(&self) -> bool {
         let raft = self.raft.shared.lock().unwrap();
-        raft.is_leader
+        raft.status == PeerStatus::Leader
     }
 
     /// The current state of this peer.
@@ -852,4 +1050,18 @@ impl VoteCtx {
     fn inc_approved_count(&self) {
         self.approved_count.fetch_add(1, Ordering::SeqCst);
     }
+}
+
+#[derive(Clone)]
+struct AppendLogResult {
+    term: u64,
+    idx: u64,
+    prev_idx: u64,
+    prev_term: u64,
+    data: Vec<u8>,
+}
+
+struct ReplicateEntriesCtx {
+    commit_succeed: AtomicBool,
+    replicate_count: AtomicUsize,
 }

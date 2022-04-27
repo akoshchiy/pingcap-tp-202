@@ -17,6 +17,9 @@ test_2a: cargo_test_2a
 
 test_2b: cargo_test_2b
 
+test_2b1: cargo_test_test_basic_agree_2b
+
+
 test_2c: cargo_test_2c
 
 test_2d: cargo_test_2d
