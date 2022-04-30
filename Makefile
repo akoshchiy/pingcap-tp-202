@@ -14,6 +14,9 @@ test: test_others test_2 test_3
 test_2: test_2a test_2b test_2c test_2d
 
 test_2a: cargo_test_2a
+test_2a1: cargo_test_initial_election_2a
+test_2a2: cargo_test_reelection_2a
+test_2a3: cargo_test_many_election_2a
 
 test_2b: cargo_test_2b
 

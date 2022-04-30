@@ -75,7 +75,11 @@ fn test_reelection_2a() {
     // be elected.
     cfg.disconnect(leader2);
     cfg.disconnect((leader2 + 1) % servers);
-    info!("disconnecting [peer#{}, peer#{}]", leader2, (leader2 + 1) % servers);
+    info!(
+        "disconnecting [peer#{}, peer#{}]",
+        leader2,
+        (leader2 + 1) % servers
+    );
 
     thread::sleep(2 * RAFT_ELECTION_TIMEOUT);
     cfg.check_no_leader();
