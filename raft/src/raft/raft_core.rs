@@ -7,18 +7,16 @@ use rand::Rng;
 
 use crate::proto::raftpb::*;
 use crate::raft::errors::*;
+use crate::raft::errors::Error::NotLeader;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(150);
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(300);
-
-const HEARTBEAT_PROGRESS_TIMEOUT: Duration = Duration::from_millis(1000);
-const VOTE_PROGRESS_TIMEOUT: Duration = Duration::from_millis(2000);
 
 pub enum RaftCoreEvent {
     RequestVote { me: usize, req: RequestVoteRequest },
     AppendEntries {
     },
-    Heartbeat { me: usize, term: u64 },
+    Heartbeat { me: usize, term: u64, },
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -40,6 +38,12 @@ struct Vote {
     term: u64,
 }
 
+pub struct LogEntry {
+    data: Vec<u8>,
+    term: u64,
+    index: u64,
+}
+
 pub struct RaftCore {
     me: usize,
     inner: Mutex<InnerRaft>,
@@ -54,8 +58,8 @@ struct InnerRaft {
     voted_for: Option<Vote>,
     received_heartbeat_time: Option<SystemTime>,
     sent_heartbeat_time: Option<SystemTime>,
-    heartbeat_progress: ProgressContainer,
     vote_progress: ProgressContainer,
+    log: Vec<LogEntry>,
 }
 
 impl InnerRaft {
@@ -67,11 +71,11 @@ impl InnerRaft {
             peers_count,
             quorum,
             status: PeerStatus::Follower,
-            voted_for: Option::None,
-            received_heartbeat_time: Option::None,
-            sent_heartbeat_time: Option::None,
-            heartbeat_progress: ProgressContainer::new(),
+            voted_for: None,
+            received_heartbeat_time: None,
+            sent_heartbeat_time: None,
             vote_progress: ProgressContainer::new(),
+            log: Vec::new(),
         }
     }
 
@@ -80,8 +84,7 @@ impl InnerRaft {
             return (false, 0);
         }
 
-        let skip_heartbeat = self
-            .sent_heartbeat_time
+        let skip_heartbeat = self.sent_heartbeat_time
             .map(|t| SystemTime::now().duration_since(t).unwrap())
             .map(|d| d < HEARTBEAT_INTERVAL)
             .unwrap_or(false);
@@ -92,14 +95,7 @@ impl InnerRaft {
 
         info!("peer#{} - try send heartbeat, term: {}", self.me, self.term);
 
-        self.sent_heartbeat_time = Option::Some(SystemTime::now());
-
-        self.heartbeat_progress.start(Progress::new(
-            VOTE_PROGRESS_TIMEOUT,
-            self.quorum,
-            self.peers_count,
-        ));
-
+        self.sent_heartbeat_time = Some(SystemTime::now());
         (true, self.term)
     }
 
@@ -112,7 +108,7 @@ impl InnerRaft {
             }
         }
 
-        self.received_heartbeat_time = Option::Some(SystemTime::now());
+        self.reset_heartbeat_timeout();
         self.term = args.term;
         self.status = PeerStatus::Follower;
 
@@ -124,19 +120,7 @@ impl InnerRaft {
     }
 
     fn handle_heartbeat_reply(&mut self, reply: AppendEntriesReply) {
-        self.heartbeat_progress.check_expired();
-
-        if !self.heartbeat_progress.contains() {
-            return;
-        }
-
-        let progress = self.heartbeat_progress.get_mut();
-
         if reply.success {
-            progress.update(true);
-            if progress.completed() {
-                self.heartbeat_progress.clear();
-            }
             return;
         }
 
@@ -145,35 +129,16 @@ impl InnerRaft {
             self.me, reply.peer, reply.term
         );
 
-        self.heartbeat_progress.clear();
         self.status = PeerStatus::Follower;
         self.term = reply.term;
     }
 
     fn handle_heartbeat_error(&mut self, err: Error) {
-        self.heartbeat_progress.check_expired();
-
-        if !self.heartbeat_progress.contains() {
-            return;
-        }
-
         warn!(
             "peer#{} - send_heartbeat error resp: {}",
             self.me,
             err.to_string()
         );
-
-        let progress = self.heartbeat_progress.get_mut();
-        progress.update(false);
-
-        if progress.failed_quorum() {
-            info!(
-                "peer#{} - send_heartbeat error quorum, loosing leadership",
-                self.me
-            );
-            self.status = PeerStatus::Follower;
-            self.heartbeat_progress.clear();
-        }
     }
 
     fn check_leader_heartbeat(&mut self) -> Option<RequestVoteRequest> {
@@ -203,7 +168,7 @@ impl InnerRaft {
         self.term += 1;
         self.status = PeerStatus::Candidate;
         self.vote_progress.start(Progress::new(
-            Duration::from_secs(2),
+            self.term,
             self.quorum,
             self.peers_count,
         ));
@@ -253,6 +218,8 @@ impl InnerRaft {
             if !already_voted { "approve" } else { "reject" }
         );
 
+        self.reset_heartbeat_timeout();
+
         RequestVoteReply {
             term: args.term,
             vote_granted: !already_voted,
@@ -260,7 +227,7 @@ impl InnerRaft {
     }
 
     fn handle_request_vote_reply(&mut self, reply: RequestVoteReply) {
-        self.vote_progress.check_expired();
+        self.vote_progress.check_expired(reply.term);
 
         if !self.vote_progress.contains() {
             return;
@@ -295,7 +262,7 @@ impl InnerRaft {
     }
 
     fn handle_request_vote_error(&mut self, err: Error) {
-        self.vote_progress.check_expired();
+        self.vote_progress.check_expired(self.term);
 
         if !self.vote_progress.contains() {
             return;
@@ -308,6 +275,19 @@ impl InnerRaft {
             self.term,
             err.to_string()
         );
+    }
+
+    fn append_log(&mut self, data: Vec<u8>) -> (u64, u64) {
+        self.log.push(LogEntry {
+            term: self.term,
+            data,
+            index: 0,
+        });
+        (self.term, self.log.len() as u64)
+    }
+
+    fn reset_heartbeat_timeout(&mut self) {
+        self.received_heartbeat_time = Option::Some(SystemTime::now());
     }
 }
 
@@ -358,12 +338,12 @@ impl RaftCore {
         let mut inner = self.inner.lock().unwrap();
         let result = inner.update_heartbeat();
         if result.0 {
-            return Option::Some(RaftCoreEvent::Heartbeat {
+            return Some(RaftCoreEvent::Heartbeat {
                 me: self.me,
                 term: result.1,
             });
         }
-        Option::None
+        None
     }
 
     pub fn check_leader_heartbeat(&self) -> Option<RaftCoreEvent> {
@@ -377,6 +357,7 @@ impl RaftCore {
 
     pub fn get_heartbeat_delay(&self) -> Duration {
         let mut inner = self.inner.lock().unwrap();
+
         inner.sent_heartbeat_time
             .map(|t| SystemTime::now().duration_since(t).unwrap())
             .map(|d| {
@@ -388,6 +369,31 @@ impl RaftCore {
             })
             .unwrap_or(HEARTBEAT_INTERVAL)
     }
+
+    pub fn append_log<M>(&self, command: &M) -> Result<AppendResult>
+        where M: labcodec::Message
+    {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.status != PeerStatus::Leader {
+            return Result::Err(NotLeader);
+        }
+
+        let mut buf = vec![];
+        labcodec::encode(command, &mut buf).map_err(Error::Encode)?;
+
+        let result = inner.append_log(buf);
+
+        // TODO execute append_entries
+        unimplemented!()
+
+        // Ok(App)
+    }
+}
+
+pub struct AppendResult {
+    pub term: u64,
+    pub index: u64,
+    pub event: RaftCoreEvent,
 }
 
 struct ProgressContainer {
@@ -401,16 +407,14 @@ impl ProgressContainer {
         }
     }
 
-    fn check_expired(&mut self) {
+    fn check_expired(&mut self, term: u64) {
         if self.progress.is_none() {
             return;
         }
 
-        let expired;
-        {
-            let progress = self.progress.as_mut().unwrap();
-            expired = progress.is_expired();
-        }
+        let expired = self.progress.as_ref()
+            .unwrap()
+            .is_expired(term);
 
         if expired {
             self.progress = Option::None;
@@ -435,7 +439,7 @@ impl ProgressContainer {
 }
 
 struct Progress {
-    expire_time: SystemTime,
+    term: u64,
     quorum_count: usize,
     peers_count: usize,
     failed_count: usize,
@@ -443,9 +447,9 @@ struct Progress {
 }
 
 impl Progress {
-    fn new(time: Duration, quorum: usize, peers_count: usize) -> Progress {
+    fn new(term: u64, quorum: usize, peers_count: usize) -> Progress {
         Progress {
-            expire_time: SystemTime::now() + time,
+            term,
             quorum_count: quorum,
             peers_count,
             failed_count: 0,
@@ -465,16 +469,12 @@ impl Progress {
         self.succeed_count
     }
 
-    fn is_expired(&self) -> bool {
-        self.expire_time < SystemTime::now()
+    fn is_expired(&self, term: u64) -> bool {
+        self.term < term
     }
 
     fn achieved_quorum(&self) -> bool {
         self.succeed_count >= self.quorum_count
-    }
-
-    fn failed_quorum(&self) -> bool {
-        self.failed_count >= self.quorum_count
     }
 
     fn completed(&self) -> bool {

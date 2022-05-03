@@ -9,6 +9,7 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 use futures::channel::mpsc::UnboundedSender;
+use futures_timer::Delay;
 use rand::Rng;
 
 #[cfg(test)]
@@ -93,6 +94,8 @@ impl Raft {
 
         // Your initialization code here (2A, 2B, 2C).
 
+        let peer = &peers[me];
+
         let raft_core = Arc::new(RaftCore::new(me, peers.len()));
         let event_handler = Arc::new(RaftEventHandler::new(peers.clone(), raft_core.clone()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -101,9 +104,9 @@ impl Raft {
         let event_handler_clone = event_handler.clone();
         let stop_clone = stop.clone();
 
-        thread::spawn(move || {
-            while !stop_clone.load(Ordering::SeqCst) {
-                thread::sleep(get_heartbeat_timeout());
+        peer.spawn(async move {
+            while !stop_clone.load(SeqCst) {
+                Delay::new(get_heartbeat_timeout()).await;
                 let events = raft_core_clone.check_leader_heartbeat();
                 for event in events {
                     event_handler_clone.handle(event);
@@ -115,15 +118,22 @@ impl Raft {
         let event_handler_clone = event_handler.clone();
         let stop_clone = stop.clone();
 
-        thread::spawn(move || {
-            while !stop_clone.load(Ordering::SeqCst) {
-                thread::sleep(raft_core_clone.get_heartbeat_delay());
+        peer.spawn(async move {
+            while !stop_clone.load(SeqCst) {
+                Delay::new(raft_core_clone.get_heartbeat_delay()).await;
                 let events = raft_core_clone.send_heartbeat();
                 for event in events {
                     event_handler_clone.handle(event);
                 }
             }
         });
+
+        // for peer_idx in 0..peers.len() {
+        //     let peer = &peers[peer_idx];
+        //     if peer_idx == me { continue };
+        //
+        //
+        // }
 
         let mut rf = Raft {
             peers,
@@ -140,7 +150,7 @@ impl Raft {
     }
 
     fn kill(&self) {
-        self.stop.store(false, SeqCst);
+        self.stop.store(true, SeqCst);
     }
 
     fn term(&self) -> u64 {
@@ -317,6 +327,8 @@ impl RaftEventHandler {
                 let args = RequestVoteArgs {
                     term: req_clone.term,
                     candidate_id: req_clone.candidate_id,
+                    last_log_term: 0,
+                    last_log_index: 0,
                 };
                 let result = peer_clone.request_vote(&args).await.map_err(Error::Rpc);
                 raft_clone.handle_request_vote_result(result);
@@ -330,9 +342,7 @@ impl RaftEventHandler {
 
     fn on_heartbeat(&self, me: usize, term: u64) {
         for i in 0..self.peers.len() {
-            if i == me {
-                continue;
-            }
+            if i == me { continue; }
 
             let peer = &self.peers[i];
             let raft_clone = self.raft_core.clone();
@@ -342,6 +352,10 @@ impl RaftEventHandler {
                 let args = AppendEntriesArgs {
                     term,
                     leader_id: me as u32,
+                    entries: Vec::with_capacity(0),
+                    leader_commit: 0,
+                    prev_log_idx: 0,
+                    prev_log_term: 0,
                 };
                 let result = peer_clone.append_entries(&args).await.map_err(Error::Rpc);
                 raft_clone.handle_heartbeat_result(result);
@@ -396,7 +410,8 @@ impl Node {
         // Your code here.
         // Example:
         // self.raft.start(command)
-        crate::your_code_here(command)
+        // crate::your_code_here(command)
+        self.raft.start(command)
     }
 
     /// The current term of this peer.
