@@ -120,7 +120,10 @@ impl InnerRaft {
             }));
         }
 
-        info!("peer#{} - tick append_entries, term: {}", self.me, self.term);
+        info!(
+            "peer#{} - tick append_entries, term: {}",
+            self.me, self.term
+        );
 
         events
     }
@@ -219,6 +222,10 @@ impl InnerRaft {
         self.vote_progress.start(Progress::new(self.term));
 
         // self-vote
+        self.voted_for = Some(Vote {
+            peer: self.me,
+            term: self.term,
+        });
         self.vote_progress.get_mut().update(true);
 
         Some(RaftCoreEvent::RequestVote {
@@ -228,30 +235,32 @@ impl InnerRaft {
     }
 
     fn handle_request_vote_request(&mut self, args: RequestVoteArgs) -> RequestVoteReply {
-        if self.term > args.term {
-            info!(
-                "peer#{} - request_vote, my term: {}, candidate_term: {}, candidate_id: {}, reject",
-                self.me, self.term, args.term, args.candidate_id
-            );
-
-            return RequestVoteReply {
-                term: self.term,
-                vote_granted: false,
-            };
+        if args.term > self.term {
+            self.become_follower();
+            self.term = args.term;
         }
 
-        let already_voted = self.voted_for.map(|v| v.term >= args.term).unwrap_or(false);
+        let last_entry = self.get_log_entry(self.log.len() as u64);
+        let last_log_idx = last_entry.map(|e| e.index).unwrap_or(0);
+        let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
 
-        let already_candidate = self.status == PeerStatus::Candidate && self.term >= args.term;
+        let matches_term = self.term == args.term;
+        let already_voted = self.voted_for
+            .map(|v| v.term >= args.term && v.peer != args.candidate_id as usize)
+            .unwrap_or(false);
+        let not_expired_log = args.last_log_term > last_log_term
+            || (args.last_log_term == last_log_term && args.last_log_index >= last_log_idx);
 
-        if !already_voted && !already_candidate {
-            self.term = args.term;
+
+        let mut vote_granted = false;
+
+        if matches_term && !already_voted && not_expired_log {
             self.voted_for = Some(Vote {
                 peer: args.candidate_id as usize,
                 term: args.term,
             });
-            self.status = PeerStatus::Candidate;
             self.reset_heartbeat_timeout();
+            vote_granted = true;
         }
 
         info!(
@@ -260,12 +269,12 @@ impl InnerRaft {
             self.term,
             args.term,
             args.candidate_id,
-            if !already_voted { "approve" } else { "reject" }
+            if vote_granted { "approve" } else { "reject" }
         );
 
         RequestVoteReply {
             term: args.term,
-            vote_granted: !already_voted,
+            vote_granted,
         }
     }
 
@@ -318,21 +327,29 @@ impl InnerRaft {
             if args.leader_commit > current_commit_idx {
                 self.commit_index = std::cmp::min(args.leader_commit, self.log.len() as u64);
 
-                for  i in current_commit_idx+1..=self.commit_index {
-                    events.push(RaftCoreEvent::CommitMessage { 
+                for i in current_commit_idx + 1..=self.commit_index {
+                    events.push(RaftCoreEvent::CommitMessage {
                         index: i,
-                        data: self.get_log_entry(i).unwrap().data.clone() 
+                        data: self.get_log_entry(i).unwrap().data.clone(),
                     });
                 }
             }
         }
-        (AppendEntriesReply {
-            term: self.term,
-            success: succeed,
-        }, events)
+        (
+            AppendEntriesReply {
+                term: self.term,
+                success: succeed,
+            },
+            events,
+        )
     }
 
-    fn replicate_log_entries(&mut self, entries: &[EntryItem], insert_idx: usize, new_entries_idx: usize) {
+    fn replicate_log_entries(
+        &mut self,
+        entries: &[EntryItem],
+        insert_idx: usize,
+        new_entries_idx: usize,
+    ) {
         let mut log_entry_idx = insert_idx;
 
         for i in new_entries_idx - 1..entries.len() {
