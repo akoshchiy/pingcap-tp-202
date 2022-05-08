@@ -1,16 +1,11 @@
-use std::ops::Add;
-use std::os::macos::raw::stat;
-use std::panic::resume_unwind;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::SeqCst;
 use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::atomic::Ordering::SeqCst;
-use std::thread;
-use std::time::{Duration, SystemTime};
 
 use futures::channel::mpsc::UnboundedSender;
+use futures::SinkExt;
 use futures_timer::Delay;
-use rand::Rng;
 
 #[cfg(test)]
 pub mod config;
@@ -23,7 +18,10 @@ mod tests;
 use self::errors::*;
 use self::persister::*;
 use crate::proto::raftpb::*;
-use crate::raft::raft_core::{get_heartbeat_timeout, HEARTBEAT_INTERVAL, HEARTBEAT_TIMEOUT, RaftCore, RaftCoreEvent, RequestVoteRequest};
+use crate::raft::raft_core::{
+    get_heartbeat_delay, get_heartbeat_timeout, AppendEntriesData, AppendEntriesPeerReply,
+    RaftCore, RaftCoreEvent,
+};
 
 /// As each Raft peer becomes aware that successive log entries are committed,
 /// the peer should send an `ApplyMsg` to the service (or tester) on the same
@@ -72,6 +70,7 @@ pub struct Raft {
     // Look at the paper's Figure 2 for a description of what
     // state a Raft server must maintain.
     raft_core: Arc<RaftCore>,
+    event_handler: Arc<RaftEventHandler>,
     stop: Arc<AtomicBool>,
 }
 
@@ -97,7 +96,12 @@ impl Raft {
         let peer = &peers[me];
 
         let raft_core = Arc::new(RaftCore::new(me, peers.len()));
-        let event_handler = Arc::new(RaftEventHandler::new(peers.clone(), raft_core.clone()));
+        let event_handler = Arc::new(RaftEventHandler::new(
+            me,
+            peers.clone(),
+            raft_core.clone(),
+            apply_ch,
+        ));
         let stop = Arc::new(AtomicBool::new(false));
 
         let raft_core_clone = raft_core.clone();
@@ -120,26 +124,20 @@ impl Raft {
 
         peer.spawn(async move {
             while !stop_clone.load(SeqCst) {
-                Delay::new(raft_core_clone.get_heartbeat_delay()).await;
-                let events = raft_core_clone.send_heartbeat();
+                Delay::new(get_heartbeat_delay()).await;
+                let events = raft_core_clone.tick_append_entries();
                 for event in events {
                     event_handler_clone.handle(event);
                 }
             }
         });
 
-        // for peer_idx in 0..peers.len() {
-        //     let peer = &peers[peer_idx];
-        //     if peer_idx == me { continue };
-        //
-        //
-        // }
-
         let mut rf = Raft {
             peers,
             persister: Mutex::new(persister),
             me,
             raft_core,
+            event_handler,
             stop,
         };
 
@@ -174,7 +172,11 @@ impl Raft {
     }
 
     fn handle_append_entries(&self, args: AppendEntriesArgs) -> AppendEntriesReply {
-        self.raft_core.handle_append_entries_request(args)
+        let result = self.raft_core.handle_append_entries_request(args);
+        for event in result.1 {
+            self.event_handler.handle(event);
+        }
+        result.0
     }
 
     /// save Raft's persistent state to stable storage,
@@ -245,21 +247,21 @@ impl Raft {
     }
 
     fn start<M>(&self, command: &M) -> Result<(u64, u64)>
-        where
-            M: labcodec::Message,
+    where
+        M: labcodec::Message,
     {
-        let index = 0;
-        let term = 0;
-        let is_leader = true;
-        let mut buf = vec![];
-        labcodec::encode(command, &mut buf).map_err(Error::Encode)?;
-        // Your code here (2B).
-
-        if is_leader {
-            Ok((index, term))
-        } else {
-            Err(Error::NotLeader)
-        }
+        // let index = 0;
+        // let term = 0;
+        // let is_leader = true;
+        // let mut buf = vec![];
+        // labcodec::encode(command, &mut buf).map_err(Error::Encode)?;
+        //
+        // if is_leader {
+        //     Ok((index, term))
+        // } else {
+        //     Err(Error::NotLeader)
+        // }
+        self.raft_core.append_log(command)
     }
 
     fn cond_install_snapshot(
@@ -295,38 +297,67 @@ impl Raft {
 }
 
 struct RaftEventHandler {
+    inner: RaftEventHandlerInner,
+}
+
+#[derive(Clone)]
+struct RaftEventHandlerInner {
+    me: usize,
     peers: Vec<RaftClient>,
     raft_core: Arc<RaftCore>,
+    apply_ch: UnboundedSender<ApplyMsg>,
 }
 
 impl RaftEventHandler {
-    fn new(peers: Vec<RaftClient>, raft_core: Arc<RaftCore>) -> RaftEventHandler {
-        RaftEventHandler { peers, raft_core }
-    }
-
-    fn handle(&self, event: RaftCoreEvent) {
-        match event {
-            RaftCoreEvent::RequestVote { me, req } => self.on_request_vote(me, req),
-            RaftCoreEvent::Heartbeat { me, term } => self.on_heartbeat(me, term),
-            _ => {}
+    fn new(
+        me: usize,
+        peers: Vec<RaftClient>,
+        raft_core: Arc<RaftCore>,
+        apply_ch: UnboundedSender<ApplyMsg>,
+    ) -> RaftEventHandler {
+        RaftEventHandler {
+            inner: RaftEventHandlerInner {
+                me,
+                peers,
+                raft_core,
+                apply_ch,
+            },
         }
     }
 
-    fn on_request_vote(&self, me: usize, req: RequestVoteRequest) {
-        for i in 0..self.peers.len() {
+    fn handle(&self, event: RaftCoreEvent) {
+        let inner = self.inner.clone();
+        RaftEventHandler::handle_inner(inner, event);
+    }
+
+    fn handle_inner(inner: RaftEventHandlerInner, event: RaftCoreEvent) {
+        match event {
+            RaftCoreEvent::RequestVote { me, term } => {
+                RaftEventHandler::on_request_vote(inner, me, term)
+            }
+            RaftCoreEvent::AppendEntries(event) => {
+                RaftEventHandler::on_append_entries(inner, event)
+            }
+            RaftCoreEvent::CommitMessage { index, data } => {
+                RaftEventHandler::on_commit_message(inner, index, data)
+            }
+        }
+    }
+
+    fn on_request_vote(inner: RaftEventHandlerInner, me: usize, term: u64) {
+        for i in 0..inner.peers.len() {
             if i == me {
                 continue;
             }
 
-            let peer = &self.peers[i];
-            let raft_clone = self.raft_core.clone();
+            let peer = &inner.peers[i];
+            let raft_clone = inner.raft_core.clone();
             let peer_clone = peer.clone();
-            let req_clone = req.clone();
 
             peer.spawn(async move {
                 let args = RequestVoteArgs {
-                    term: req_clone.term,
-                    candidate_id: req_clone.candidate_id,
+                    term,
+                    candidate_id: me as u32,
                     last_log_term: 0,
                     last_log_index: 0,
                 };
@@ -336,32 +367,83 @@ impl RaftEventHandler {
         }
     }
 
-    fn on_append_entries(&self) {
-        todo!()
+    fn on_commit_message(inner: RaftEventHandlerInner, index: u64, data: Vec<u8>) {
+        let peer = &inner.peers[inner.me];
+        let mut apply_ch = inner.apply_ch.clone();
+        peer.spawn(async move {
+            apply_ch
+                .send(ApplyMsg::Command { data, index })
+                .await
+                .unwrap();
+        });
     }
 
-    fn on_heartbeat(&self, me: usize, term: u64) {
-        for i in 0..self.peers.len() {
-            if i == me { continue; }
+    fn on_append_entries(inner: RaftEventHandlerInner, event: AppendEntriesData) {
+        let peer = &inner.peers[event.peer];
+        let raft_clone = inner.raft_core.clone();
+        let peer_clone = peer.clone();
+        let inner_clone = inner.clone();
 
-            let peer = &self.peers[i];
-            let raft_clone = self.raft_core.clone();
-            let peer_clone = peer.clone();
+        peer.spawn(async move {
+            let entries: Vec<_> = event
+                .entries
+                .into_iter()
+                .map(|entry| EntryItem {
+                    term: entry.term,
+                    index: entry.term,
+                    data: entry.data,
+                })
+                .collect();
 
-            peer.spawn(async move {
-                let args = AppendEntriesArgs {
-                    term,
-                    leader_id: me as u32,
-                    entries: Vec::with_capacity(0),
-                    leader_commit: 0,
-                    prev_log_idx: 0,
-                    prev_log_term: 0,
-                };
-                let result = peer_clone.append_entries(&args).await.map_err(Error::Rpc);
-                raft_clone.handle_heartbeat_result(result);
-            });
-        }
+            let entries_len = entries.len();
+
+            let args = AppendEntriesArgs {
+                term: event.term,
+                leader_id: event.me as u32,
+                entries,
+                leader_commit: event.leader_commit,
+                prev_log_idx: event.prev_log_index,
+                prev_log_term: event.prev_log_term,
+            };
+
+            let result = peer_clone
+                .append_entries(&args)
+                .await
+                .map_err(Error::Rpc)
+                .map(|r| AppendEntriesPeerReply {
+                    reply: r,
+                    entries_len,
+                });
+
+            let events = raft_clone.handle_append_entries_result(event.peer, result);
+            for event in events {
+                RaftEventHandler::handle_inner(inner_clone.clone(), event);
+            }
+        });
     }
+
+    // fn on_heartbeat(&self, me: usize, term: u64) {
+    //     for i in 0..self.peers.len() {
+    //         if i == me { continue; }
+
+    //         let peer = &self.peers[i];
+    //         let raft_clone = self.raft_core.clone();
+    //         let peer_clone = peer.clone();
+
+    //         peer.spawn(async move {
+    //             let args = AppendEntriesArgs {
+    //                 term,
+    //                 leader_id: me as u32,
+    //                 entries: Vec::with_capacity(0),
+    //                 leader_commit: 0,
+    //                 prev_log_idx: 0,
+    //                 prev_log_term: 0,
+    //             };
+    //             let result = peer_clone.append_entries(&args).await.map_err(Error::Rpc);
+    //             raft_clone.handle_heartbeat_result(i, result);
+    //         });
+    //     }
+    // }
 }
 
 // Choose concurrency paradigm.
@@ -404,8 +486,8 @@ impl Node {
     ///
     /// This method must return without blocking on the raft.
     pub fn start<M>(&self, command: &M) -> Result<(u64, u64)>
-        where
-            M: labcodec::Message,
+    where
+        M: labcodec::Message,
     {
         // Your code here.
         // Example:
