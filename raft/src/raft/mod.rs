@@ -17,6 +17,7 @@ mod tests;
 
 use self::errors::*;
 use self::persister::*;
+use self::raft_core::RequestVoteData;
 use crate::proto::raftpb::*;
 use crate::raft::raft_core::{
     get_heartbeat_delay, get_heartbeat_timeout, AppendEntriesData, AppendEntriesPeerReply,
@@ -332,11 +333,9 @@ impl RaftEventHandler {
 
     fn handle_inner(inner: RaftEventHandlerInner, event: RaftCoreEvent) {
         match event {
-            RaftCoreEvent::RequestVote { me, term } => {
-                RaftEventHandler::on_request_vote(inner, me, term)
-            }
-            RaftCoreEvent::AppendEntries(event) => {
-                RaftEventHandler::on_append_entries(inner, event)
+            RaftCoreEvent::RequestVote { data } => RaftEventHandler::on_request_vote(inner, data),
+            RaftCoreEvent::AppendEntries { data } => {
+                RaftEventHandler::on_append_entries(inner, data)
             }
             RaftCoreEvent::CommitMessage { index, data } => {
                 RaftEventHandler::on_commit_message(inner, index, data)
@@ -344,9 +343,9 @@ impl RaftEventHandler {
         }
     }
 
-    fn on_request_vote(inner: RaftEventHandlerInner, me: usize, term: u64) {
+    fn on_request_vote(inner: RaftEventHandlerInner, data: RequestVoteData) {
         for i in 0..inner.peers.len() {
-            if i == me {
+            if i == data.me {
                 continue;
             }
 
@@ -356,10 +355,10 @@ impl RaftEventHandler {
 
             peer.spawn(async move {
                 let args = RequestVoteArgs {
-                    term,
-                    candidate_id: me as u32,
-                    last_log_term: 0,
-                    last_log_index: 0,
+                    term: data.term,
+                    candidate_id: data.me as u32,
+                    last_log_term: data.last_log_term,
+                    last_log_index: data.last_log_idx,
                 };
                 let result = peer_clone.request_vote(&args).await.map_err(Error::Rpc);
                 raft_clone.handle_request_vote_result(result);
@@ -370,6 +369,9 @@ impl RaftEventHandler {
     fn on_commit_message(inner: RaftEventHandlerInner, index: u64, data: Vec<u8>) {
         let peer = &inner.peers[inner.me];
         let mut apply_ch = inner.apply_ch.clone();
+
+        info!("peer#{} - commit msg, idx: {}, data: {:?}", inner.me, index, &data);
+
         peer.spawn(async move {
             apply_ch
                 .send(ApplyMsg::Command { data, index })
@@ -378,14 +380,14 @@ impl RaftEventHandler {
         });
     }
 
-    fn on_append_entries(inner: RaftEventHandlerInner, event: AppendEntriesData) {
-        let peer = &inner.peers[event.peer];
+    fn on_append_entries(inner: RaftEventHandlerInner, data: AppendEntriesData) {
+        let peer = &inner.peers[data.peer];
         let raft_clone = inner.raft_core.clone();
         let peer_clone = peer.clone();
         let inner_clone = inner.clone();
 
         peer.spawn(async move {
-            let entries: Vec<_> = event
+            let entries: Vec<_> = data
                 .entries
                 .into_iter()
                 .map(|entry| EntryItem {
@@ -398,12 +400,12 @@ impl RaftEventHandler {
             let entries_len = entries.len();
 
             let args = AppendEntriesArgs {
-                term: event.term,
-                leader_id: event.me as u32,
+                term: data.term,
+                leader_id: data.me as u32,
                 entries,
-                leader_commit: event.leader_commit,
-                prev_log_idx: event.prev_log_index,
-                prev_log_term: event.prev_log_term,
+                leader_commit: data.leader_commit,
+                prev_log_idx: data.prev_log_index,
+                prev_log_term: data.prev_log_term,
             };
 
             let result = peer_clone
@@ -415,7 +417,7 @@ impl RaftEventHandler {
                     entries_len,
                 });
 
-            let events = raft_clone.handle_append_entries_result(event.peer, result);
+            let events = raft_clone.handle_append_entries_result(data.peer, result);
             for event in events {
                 RaftEventHandler::handle_inner(inner_clone.clone(), event);
             }

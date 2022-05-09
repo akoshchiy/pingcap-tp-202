@@ -11,9 +11,17 @@ pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(150);
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(300);
 
 pub enum RaftCoreEvent {
-    RequestVote { me: usize, term: u64 },
-    AppendEntries(AppendEntriesData),
+    RequestVote { data: RequestVoteData },
+    AppendEntries { data: AppendEntriesData },
     CommitMessage { index: u64, data: Vec<u8> },
+}
+
+#[derive(Clone, Copy)]
+pub struct RequestVoteData {
+    pub me: usize,
+    pub term: u64,
+    pub last_log_idx: u64,
+    pub last_log_term: u64,
 }
 
 pub struct AppendEntriesData {
@@ -109,15 +117,17 @@ impl InnerRaft {
 
             let entries = self.log[(next_index - 1) as usize..].to_vec();
 
-            events.push(RaftCoreEvent::AppendEntries(AppendEntriesData {
-                peer: i,
-                me: self.me,
-                term: self.term,
-                prev_log_index,
-                prev_log_term,
-                entries,
-                leader_commit: self.commit_index,
-            }));
+            events.push(RaftCoreEvent::AppendEntries {
+                data: AppendEntriesData {
+                    peer: i,
+                    me: self.me,
+                    term: self.term,
+                    prev_log_index,
+                    prev_log_term,
+                    entries,
+                    leader_commit: self.commit_index,
+                },
+            });
         }
 
         info!(
@@ -147,7 +157,7 @@ impl InnerRaft {
                 self.me, peer, reply.term, self.term
             );
             self.become_follower();
-
+            self.term = reply.term;
             return Vec::with_capacity(0);
         }
 
@@ -163,28 +173,19 @@ impl InnerRaft {
         let mut events = Vec::new();
 
         for i in self.commit_index + 1..=self.get_log_last_index() {
-            let matches_term = self
-                .get_log_entry(i)
-                .map(|e| e.term == self.term)
-                .unwrap_or(false);
+            let mut match_count = 1;
 
-            if matches_term {
-                let mut match_count = 1;
-
-                for peer_idx in 0..self.peers_count {
-                    if self.match_index[peer_idx] >= i {
-                        match_count += 1;
-                    }
+            for peer_idx in 0..self.peers_count {
+                if self.match_index[peer_idx] >= i {
+                    match_count += 1;
                 }
-
-                if match_count >= self.quorum {
-                    self.commit_index = i;
-
-                    events.push(RaftCoreEvent::CommitMessage {
-                        index: i,
-                        data: self.get_log_entry(i).unwrap().data.clone(),
-                    });
-                }
+            }
+            if match_count >= self.quorum {
+                self.commit_index = i;
+                events.push(RaftCoreEvent::CommitMessage {
+                    index: i,
+                    data: self.get_log_entry(i).unwrap().data.clone(),
+                });
             }
         }
 
@@ -228,9 +229,17 @@ impl InnerRaft {
         });
         self.vote_progress.get_mut().update(true);
 
+        let last_entry = self.get_last_log_entry();
+        let last_log_idx = last_entry.map(|e| e.index).unwrap_or(0);
+        let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
+
         Some(RaftCoreEvent::RequestVote {
-            term: self.term,
-            me: self.me,
+            data: RequestVoteData {
+                me: self.me,
+                term: self.term,
+                last_log_idx: last_log_idx,
+                last_log_term: last_log_term,
+            },
         })
     }
 
@@ -245,12 +254,12 @@ impl InnerRaft {
         let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
 
         let matches_term = self.term == args.term;
-        let already_voted = self.voted_for
+        let already_voted = self
+            .voted_for
             .map(|v| v.term >= args.term && v.peer != args.candidate_id as usize)
             .unwrap_or(false);
         let not_expired_log = args.last_log_term > last_log_term
             || (args.last_log_term == last_log_term && args.last_log_index >= last_log_idx);
-
 
         let mut vote_granted = false;
 
@@ -264,11 +273,20 @@ impl InnerRaft {
         }
 
         info!(
-            "peer#{} - request_vote, my term: {}, candidate_term: {}, candidate_id: {}, {}",
+            "peer#{} - request_vote, my term: {}, candidate_term: {}, candidate_id: {}, \
+             last_log_idx: {}, last_log_term: {}, arg.last_log_idx: {}, arg.last_log_term: {}, \
+             matches_term: {}, already_voted: {}, not_expired_log: {} ==  {}",
             self.me,
             self.term,
             args.term,
             args.candidate_id,
+            last_log_idx,
+            last_log_term,
+            args.last_log_index,
+            args.last_log_term,
+            matches_term,
+            already_voted,
+            not_expired_log,
             if vote_granted { "approve" } else { "reject" }
         );
 
@@ -363,11 +381,13 @@ impl InnerRaft {
             if log_entry_idx > self.log.len() {
                 self.log.push(log_entry);
             } else {
-                self.log[log_entry_idx] = log_entry;
+                self.log[log_entry_idx - 1] = log_entry;
             }
 
             log_entry_idx += 1;
         }
+
+        info!("peer#{} - replicate log: {:?}", self.me, self.log);
     }
 
     fn matches_log_term(&self, args: &AppendEntriesArgs) -> bool {
@@ -435,6 +455,13 @@ impl InnerRaft {
         self.log[self.log.len() - 1].index
     }
 
+    fn get_last_log_entry(&self) -> Option<&LogEntry> {
+        if self.log.is_empty() {
+            return Option::None;
+        }
+        self.get_log_entry(self.log.len() as u64)
+    }
+
     fn get_log_entry(&self, index: u64) -> Option<&LogEntry> {
         if index == 0 {
             return None;
@@ -462,13 +489,21 @@ impl InnerRaft {
         );
     }
 
-    fn append_log(&mut self, data: Vec<u8>) -> (u64, u64) {
+    fn append_log<M>(&mut self, data: Vec<u8>, msg: &M) -> (u64, u64)
+    where
+        M: labcodec::Message,
+    {
         let index = self.get_log_last_index() + 1;
-        self.log.push(LogEntry {
+        let entry = LogEntry {
             term: self.term,
             data,
             index,
-        });
+        };
+        self.log.push(entry);
+        info!(
+            "peer#{} - append_log, term: {}, index: {}, data: {:?}, log: {:?}",
+            self.me, self.term, index, msg, self.log
+        );
         (index, self.term)
     }
 
@@ -556,7 +591,7 @@ impl RaftCore {
         let mut buf = vec![];
         labcodec::encode(command, &mut buf).map_err(Error::Encode)?;
 
-        Ok(inner.append_log(buf))
+        Ok(inner.append_log(buf, command))
     }
 }
 

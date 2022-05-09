@@ -169,7 +169,9 @@ fn test_fail_agree_2b() {
 
     // follower network disconnection
     let leader = cfg.check_one_leader();
-    cfg.disconnect((leader + 1) % servers);
+    let peer_to_disconnect = (leader + 1) % servers;
+    info!("disconnecting peer#{}", peer_to_disconnect);
+    cfg.disconnect(peer_to_disconnect);
 
     // agree despite one disconnected server?
     cfg.one(Entry { x: 102 }, servers - 1, false);
@@ -179,7 +181,8 @@ fn test_fail_agree_2b() {
     cfg.one(Entry { x: 105 }, servers - 1, false);
 
     // re-connect
-    cfg.connect((leader + 1) % servers);
+    info!("connecting peer#{}", peer_to_disconnect);
+    cfg.connect(peer_to_disconnect);
 
     // agree with full set of servers?
     cfg.one(Entry { x: 106 }, servers, true);

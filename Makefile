@@ -20,8 +20,10 @@ test_2a3: cargo_test_many_election_2a
 
 test_2b: cargo_test_2b
 
-test_2b1: cargo_test_test_basic_agree_2b
-
+test_2b1: cargo_test_basic_agree_2b
+test_2b2: cargo_test_fail_agree_2b
+test_2b3: cargo_test_fail_no_agree_2b
+test_2b4: cargo_test_concurrent_starts_2b
 
 test_2c: cargo_test_2c
 
