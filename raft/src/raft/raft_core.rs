@@ -7,6 +7,8 @@ use crate::proto::raftpb::*;
 use crate::raft::errors::Error::NotLeader;
 use crate::raft::errors::*;
 
+use super::persister::Persister;
+
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(150);
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(300);
 
@@ -41,16 +43,31 @@ enum PeerStatus {
     Leader,
 }
 
-#[derive(Copy, Clone, Debug)]
-struct Vote {
-    peer: usize,
-    term: u64,
+#[derive(Clone, PartialEq, Message)]
+pub struct PersistState {
+    #[prost(uint64, tag = "1")]
+    pub term: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub log: Vec<LogEntry>,
+    #[prost(message, tag = "3")]
+    pub voted_for: Option<Vote>,
 }
 
-#[derive(Clone, Debug)]
-pub struct LogEntry {
-    pub data: Vec<u8>,
+#[derive(Copy, Clone, PartialEq, Message)]
+pub struct Vote {
+    #[prost(uint64, tag = "1")]
+    pub peer: u64,
+    #[prost(uint64, tag = "2")]
     pub term: u64,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct LogEntry {
+    #[prost(bytes, tag = "1")]
+    pub data: Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub term: u64,
+    #[prost(uint64, tag = "3")]
     pub index: u64,
 }
 
@@ -72,10 +89,11 @@ struct InnerRaft {
     next_index: Vec<u64>,
     match_index: Vec<u64>,
     commit_index: u64,
+    persister: Box<dyn Persister>,
 }
 
 impl InnerRaft {
-    fn new(me: usize, peers_count: usize) -> InnerRaft {
+    fn new(me: usize, peers_count: usize, persister: Box<dyn Persister>) -> InnerRaft {
         let quorum = peers_count / 2 + 1;
         InnerRaft {
             me,
@@ -90,6 +108,7 @@ impl InnerRaft {
             next_index: vec![0; peers_count],
             match_index: vec![0; peers_count],
             commit_index: 0,
+            persister,
         }
     }
 
@@ -158,6 +177,7 @@ impl InnerRaft {
             );
             self.become_follower();
             self.term = reply.term;
+            self.persist();
             return Vec::with_capacity(0);
         }
 
@@ -224,7 +244,7 @@ impl InnerRaft {
 
         // self-vote
         self.voted_for = Some(Vote {
-            peer: self.me,
+            peer: self.me as u64,
             term: self.term,
         });
         self.vote_progress.get_mut().update(true);
@@ -232,6 +252,8 @@ impl InnerRaft {
         let last_entry = self.get_last_log_entry();
         let last_log_idx = last_entry.map(|e| e.index).unwrap_or(0);
         let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
+
+        self.persist();
 
         Some(RaftCoreEvent::RequestVote {
             data: RequestVoteData {
@@ -256,7 +278,7 @@ impl InnerRaft {
         let matches_term = self.term == args.term;
         let already_voted = self
             .voted_for
-            .map(|v| v.term >= args.term && v.peer != args.candidate_id as usize)
+            .map(|v| v.term >= args.term && v.peer != args.candidate_id as u64)
             .unwrap_or(false);
         let not_expired_log = args.last_log_term > last_log_term
             || (args.last_log_term == last_log_term && args.last_log_index >= last_log_idx);
@@ -265,7 +287,7 @@ impl InnerRaft {
 
         if matches_term && !already_voted && not_expired_log {
             self.voted_for = Some(Vote {
-                peer: args.candidate_id as usize,
+                peer: args.candidate_id as u64,
                 term: args.term,
             });
             self.reset_heartbeat_timeout();
@@ -289,6 +311,8 @@ impl InnerRaft {
             not_expired_log,
             if vote_granted { "approve" } else { "reject" }
         );
+
+        self.persist();
 
         RequestVoteReply {
             term: args.term,
@@ -353,6 +377,7 @@ impl InnerRaft {
                 }
             }
         }
+        self.persist();
         (
             AppendEntriesReply {
                 term: self.term,
@@ -504,19 +529,41 @@ impl InnerRaft {
             "peer#{} - append_log, term: {}, index: {}, data: {:?}, log: {:?}",
             self.me, self.term, index, msg, self.log
         );
+        self.persist();
         (index, self.term)
     }
 
     fn reset_heartbeat_timeout(&mut self) {
         self.received_heartbeat_time = Some(SystemTime::now());
     }
+
+    fn persist(&self) {
+        let state = PersistState {
+            term: self.term,
+            log: self.log.clone(),
+            voted_for: self.voted_for.clone(),
+        };
+
+        let mut buf: Vec<u8> = vec![];
+        labcodec::encode(&state, &mut buf).unwrap();
+
+        self.persister.save_raft_state(buf);
+    }
+
+    fn restore(&mut self, data: &[u8]) {
+        let state: PersistState = labcodec::decode(data).unwrap();
+
+        self.term = state.term;
+        self.log = state.log;
+        self.voted_for = state.voted_for;
+    }
 }
 
 impl RaftCore {
-    pub fn new(me: usize, peers_count: usize) -> RaftCore {
+    pub fn new(me: usize, peers_count: usize, persister: Box<dyn Persister>) -> RaftCore {
         RaftCore {
             me,
-            inner: Mutex::new(InnerRaft::new(me, peers_count)),
+            inner: Mutex::new(InnerRaft::new(me, peers_count, persister)),
         }
     }
 
@@ -592,6 +639,11 @@ impl RaftCore {
         labcodec::encode(command, &mut buf).map_err(Error::Encode)?;
 
         Ok(inner.append_log(buf, command))
+    }
+
+    pub fn restore(&self, data: &[u8]) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.restore(data);
     }
 }
 

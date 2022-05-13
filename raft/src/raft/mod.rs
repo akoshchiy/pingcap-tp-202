@@ -1,7 +1,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::mpsc::{sync_channel, Receiver};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 use futures::channel::mpsc::UnboundedSender;
 use futures::SinkExt;
@@ -62,8 +62,6 @@ impl State {
 pub struct Raft {
     // RPC end points of all peers
     peers: Vec<RaftClient>,
-    // Object to hold this peer's persisted state
-    persister: Mutex<Box<dyn Persister>>,
     // this peer's index into peers[]
     me: usize,
     // state: Arc<State>,
@@ -96,7 +94,7 @@ impl Raft {
 
         let peer = &peers[me];
 
-        let raft_core = Arc::new(RaftCore::new(me, peers.len()));
+        let raft_core = Arc::new(RaftCore::new(me, peers.len(), persister));
         let event_handler = Arc::new(RaftEventHandler::new(
             me,
             peers.clone(),
@@ -135,7 +133,6 @@ impl Raft {
 
         let mut rf = Raft {
             peers,
-            persister: Mutex::new(persister),
             me,
             raft_core,
             event_handler,
@@ -196,6 +193,7 @@ impl Raft {
         if data.is_empty() {
             // bootstrap without any state?
         }
+        self.raft_core.restore(data);
         // Your code here (2C).
         // Example:
         // match labcodec::decode(data) {
@@ -290,9 +288,7 @@ impl Raft {
         let _ = self.snapshot(0, &[]);
         let _ = self.send_request_vote(0, Default::default());
         self.persist();
-        // let _ = &self.state;
         let _ = &self.me;
-        let _ = &self.persister;
         let _ = &self.peers;
     }
 }
