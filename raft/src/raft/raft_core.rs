@@ -1,3 +1,4 @@
+use futures::channel::mpsc::UnboundedSender;
 use rand::Rng;
 use std::ops::Add;
 use std::sync::Mutex;
@@ -11,11 +12,14 @@ use super::persister::Persister;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(150);
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(300);
+pub const ELECTION_TIMEOUT: Duration = Duration::from_millis(100);
 
 pub enum RaftCoreEvent {
-    RequestVote { data: RequestVoteData },
     AppendEntries { data: AppendEntriesData },
     CommitMessage { index: u64, data: Vec<u8> },
+    BecomeFollower,
+    BecomeLeader,
+    BecomeCandidate { data: RequestVoteData },
 }
 
 #[derive(Clone, Copy)]
@@ -37,7 +41,7 @@ pub struct AppendEntriesData {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum PeerStatus {
+pub enum PeerStatus {
     Follower,
     Candidate,
     Leader,
@@ -91,10 +95,16 @@ struct InnerRaft {
     commit_index: u64,
     last_applied: u64,
     persister: Box<dyn Persister>,
+    event_ch: UnboundedSender<RaftCoreEvent>,
 }
 
 impl InnerRaft {
-    fn new(me: usize, peers_count: usize, persister: Box<dyn Persister>) -> InnerRaft {
+    fn new(
+        me: usize,
+        peers_count: usize,
+        persister: Box<dyn Persister>,
+        event_ch: UnboundedSender<RaftCoreEvent>,
+    ) -> InnerRaft {
         let quorum = peers_count / 2 + 1;
         InnerRaft {
             me,
@@ -111,6 +121,7 @@ impl InnerRaft {
             commit_index: 0,
             last_applied: 0,
             persister,
+            event_ch,
         }
     }
 
@@ -118,12 +129,15 @@ impl InnerRaft {
         self.status == PeerStatus::Leader
     }
 
-    fn tick_append_entries(&mut self) -> Vec<RaftCoreEvent> {
+    fn tick_append_entries(&mut self) {
         if self.status != PeerStatus::Leader {
-            return Vec::with_capacity(0);
+            return;
         }
 
-        let mut events = Vec::with_capacity(self.peers_count);
+        info!(
+            "peer#{} - tick append_entries, term: {}",
+            self.me, self.term
+        );
 
         for i in 0..self.peers_count {
             if i == self.me {
@@ -138,7 +152,7 @@ impl InnerRaft {
 
             let entries = self.log[(next_index - 1) as usize..].to_vec();
 
-            events.push(RaftCoreEvent::AppendEntries {
+            self.send_event(RaftCoreEvent::AppendEntries {
                 data: AppendEntriesData {
                     peer: i,
                     me: self.me,
@@ -150,27 +164,15 @@ impl InnerRaft {
                 },
             });
         }
-
-        info!(
-            "peer#{} - tick append_entries, term: {}",
-            self.me, self.term
-        );
-
-        events
     }
 
-    fn handle_append_entries_reply(
-        &mut self,
-        peer: usize,
-        peer_reply: AppendEntriesPeerReply,
-    ) -> Vec<RaftCoreEvent> {
+    fn handle_append_entries_reply(&mut self, peer: usize, peer_reply: AppendEntriesPeerReply) {
         let reply = peer_reply.reply;
 
         if !self.is_leader() {
             info!("peer#{} - append_entries ignore, not a leader, peer:{}, reply.term: {}, my.term: {}",
                 self.me, peer, reply.term, self.term);
-
-            return Vec::with_capacity(0);
+            return;
         }
 
         if reply.term > self.term {
@@ -180,19 +182,17 @@ impl InnerRaft {
             self.become_follower();
             self.term = reply.term;
             self.persist();
-            return Vec::with_capacity(0);
+            return;
         }
 
         if !reply.success {
             self.next_index[peer] = self.next_index[peer] - 1;
-            return Vec::with_capacity(0);
+            return;
         }
 
         let next_idx = self.next_index[peer];
         self.next_index[peer] = next_idx + peer_reply.entries_len as u64;
         self.match_index[peer] = self.next_index[peer] - 1;
-
-        let mut events = Vec::new();
 
         for i in self.commit_index + 1..=self.get_log_last_index() {
             let mut match_count = 1;
@@ -203,20 +203,16 @@ impl InnerRaft {
                 }
             }
             if match_count >= self.quorum {
-                for e in self.apply_commit(i) {
-                    events.push(e);
-                }
+                self.apply_commit(i);
             }
         }
-
-        events
     }
 
-    fn check_leader_heartbeat(&mut self) -> Option<RaftCoreEvent> {
+    fn check_leader_heartbeat(&mut self) {
         let now = SystemTime::now();
 
         if self.status == PeerStatus::Leader {
-            return None;
+            return;
         }
 
         let duration_since = self
@@ -228,7 +224,7 @@ impl InnerRaft {
             .unwrap_or(true);
 
         if !expired {
-            return None;
+            return;
         }
 
         let dur_ms = duration_since.map(|d| d.as_millis()).unwrap_or(0);
@@ -238,31 +234,52 @@ impl InnerRaft {
             self.me, dur_ms
         );
 
-        self.term += 1;
-        self.status = PeerStatus::Candidate;
-        self.vote_progress.start(Progress::new(self.term));
+        self.become_candidate();
 
-        // self-vote
-        self.voted_for = Some(Vote {
-            peer: self.me as u64,
-            term: self.term,
-        });
-        self.vote_progress.get_mut().update(true);
+        // self.term += 1;
+        // self.status = PeerStatus::Candidate;
+        // self.vote_progress.start(Progress::new(self.term));
 
-        let last_entry = self.get_last_log_entry();
-        let last_log_idx = last_entry.map(|e| e.index).unwrap_or(0);
-        let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
+        // // self-vote
+        // self.voted_for = Some(Vote {
+        //     peer: self.me as u64,
+        //     term: self.term,
+        // });
+        // self.vote_progress.get_mut().update(true);
 
-        self.persist();
+        // let last_entry = self.get_last_log_entry();
+        // let last_log_idx = last_entry.map(|e| e.index).unwrap_or(0);
+        // let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
 
-        Some(RaftCoreEvent::RequestVote {
-            data: RequestVoteData {
-                me: self.me,
-                term: self.term,
-                last_log_idx: last_log_idx,
-                last_log_term: last_log_term,
-            },
-        })
+        // self.persist();
+
+        // self.event_ch
+        //     .unbounded_send(RaftCoreEvent::RequestVote {
+        //         data: RequestVoteData {
+        //             me: self.me,
+        //             term: self.term,
+        //             last_log_idx: last_log_idx,
+        //             last_log_term: last_log_term,
+        //         },
+        //     })
+        //     .unwrap();
+    }
+
+    fn check_election_timeout(&mut self) {
+        if self.status != PeerStatus::Candidate || !self.vote_progress.contains() {
+            return;
+        }
+
+        let started_at = self.vote_progress.get().started_at;
+        let duration_since = SystemTime::now().duration_since(started_at).unwrap();
+
+        if duration_since > ELECTION_TIMEOUT {
+            info!(
+                "peer#{} - vote election timeout, initiating new vote",
+                self.me
+            );
+            self.become_candidate();
+        }
     }
 
     fn handle_request_vote_request(&mut self, args: RequestVoteArgs) -> RequestVoteReply {
@@ -320,18 +337,12 @@ impl InnerRaft {
         }
     }
 
-    fn handle_append_entries_request(
-        &mut self,
-        args: AppendEntriesArgs,
-    ) -> (AppendEntriesReply, Vec<RaftCoreEvent>) {
+    fn handle_append_entries_request(&mut self, args: AppendEntriesArgs) -> AppendEntriesReply {
         if args.term < self.term {
-            return (
-                AppendEntriesReply {
-                    term: self.term,
-                    success: false,
-                },
-                Vec::with_capacity(0),
-            );
+            return AppendEntriesReply {
+                term: self.term,
+                success: false,
+            };
         }
 
         self.term = args.term;
@@ -339,7 +350,6 @@ impl InnerRaft {
         self.become_follower();
 
         let mut succeed = false;
-        let mut events = Vec::new();
 
         if self.matches_log_term(&args) {
             succeed = true;
@@ -368,19 +378,16 @@ impl InnerRaft {
 
             if args.leader_commit > current_commit_idx {
                 let new_commit_index = std::cmp::min(args.leader_commit, self.log.len() as u64);
-                for e in self.apply_commit(new_commit_index) {
-                    events.push(e);
-                }
+                self.apply_commit(new_commit_index);
             }
         }
+
         self.persist();
-        (
-            AppendEntriesReply {
-                term: self.term,
-                success: succeed,
-            },
-            events,
-        )
+
+        AppendEntriesReply {
+            term: self.term,
+            success: succeed,
+        }
     }
 
     fn replicate_log_entries(
@@ -421,7 +428,7 @@ impl InnerRaft {
     }
 
     fn handle_request_vote_reply(&mut self, reply: RequestVoteReply) {
-        self.vote_progress.check_expired(reply.term);
+        // self.vote_progress.check_expired(reply.term);
 
         if !self.vote_progress.contains() {
             return;
@@ -463,10 +470,40 @@ impl InnerRaft {
             self.match_index[i] = 0;
             self.next_index[i] = last_index + 1;
         }
+        self.send_event(RaftCoreEvent::BecomeLeader);
     }
 
     fn become_follower(&mut self) {
         self.status = PeerStatus::Follower;
+        self.send_event(RaftCoreEvent::BecomeFollower);
+    }
+
+    fn become_candidate(&mut self) {
+        self.status = PeerStatus::Candidate;
+        self.term += 1;
+        self.vote_progress.start(Progress::new(self.term));
+
+        // self-vote
+        self.voted_for = Some(Vote {
+            peer: self.me as u64,
+            term: self.term,
+        });
+        self.vote_progress.get_mut().update(true);
+
+        let last_entry = self.get_last_log_entry();
+        let last_log_idx = last_entry.map(|e| e.index).unwrap_or(0);
+        let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
+
+        self.persist();
+        
+        self.send_event(RaftCoreEvent::BecomeCandidate {
+            data: RequestVoteData {
+                me: self.me,
+                term: self.term,
+                last_log_idx: last_log_idx,
+                last_log_term: last_log_term,
+            },
+        });
     }
 
     fn get_log_last_index(&self) -> u64 {
@@ -495,7 +532,7 @@ impl InnerRaft {
     }
 
     fn handle_request_vote_error(&mut self, err: Error) {
-        self.vote_progress.check_expired(self.term);
+        // self.vote_progress.check_expired(self.term);
 
         if !self.vote_progress.contains() {
             return;
@@ -553,16 +590,16 @@ impl InnerRaft {
         self.voted_for = state.voted_for;
     }
 
-    fn apply_commit(&mut self, commit_index: u64) -> Vec<RaftCoreEvent> {
+    fn apply_commit(&mut self, commit_index: u64) {
         if self.commit_index > commit_index {
-            return Vec::with_capacity(0);
+            return;
         }
 
         self.commit_index = commit_index;
 
         info!("peer#{} - apply_commit to index {}", self.me, commit_index);
 
-        let mut events = Vec::new();
+        // let mut events = Vec::new();
 
         while self.commit_index > self.last_applied {
             let idx = self.last_applied + 1;
@@ -571,23 +608,34 @@ impl InnerRaft {
 
             info!("peer#{} - apply_state entry: {:?}", self.me, entry);
 
-            events.push(RaftCoreEvent::CommitMessage {
+            self.send_event(RaftCoreEvent::CommitMessage {
                 index: idx,
                 data: entry.data.clone(),
             });
 
             self.last_applied = idx;
         }
+    }
 
-        events
+    fn send_event(&self, event: RaftCoreEvent) {
+        let res = self.event_ch.unbounded_send(event);
+        match res {
+            Ok(_) => {}
+            Err(err) => warn!("peer#{} - send_event err: {}", self.me, err),
+        }
     }
 }
 
 impl RaftCore {
-    pub fn new(me: usize, peers_count: usize, persister: Box<dyn Persister>) -> RaftCore {
+    pub fn new(
+        me: usize,
+        peers_count: usize,
+        persister: Box<dyn Persister>,
+        event_ch: UnboundedSender<RaftCoreEvent>,
+    ) -> RaftCore {
         RaftCore {
             me,
-            inner: Mutex::new(InnerRaft::new(me, peers_count, persister)),
+            inner: Mutex::new(InnerRaft::new(me, peers_count, persister, event_ch)),
         }
     }
 
@@ -605,10 +653,7 @@ impl RaftCore {
         }
     }
 
-    pub fn handle_append_entries_request(
-        &self,
-        args: AppendEntriesArgs,
-    ) -> (AppendEntriesReply, Vec<RaftCoreEvent>) {
+    pub fn handle_append_entries_request(&self, args: AppendEntriesArgs) -> AppendEntriesReply {
         let mut inner = self.inner.lock().unwrap();
         inner.handle_append_entries_request(args)
     }
@@ -617,7 +662,7 @@ impl RaftCore {
         &self,
         peer: usize,
         result: Result<AppendEntriesPeerReply>,
-    ) -> Vec<RaftCoreEvent> {
+    ) {
         let mut inner = self.inner.lock().unwrap();
         match result {
             Ok(reply) => inner.handle_append_entries_reply(peer, reply),
@@ -628,9 +673,13 @@ impl RaftCore {
                     peer,
                     err.to_string()
                 );
-                Vec::with_capacity(0)
             }
         }
+    }
+
+    pub fn get_peer_status(&self) -> PeerStatus {
+        let inner = self.inner.lock().unwrap();
+        inner.status
     }
 
     pub fn get_state(&self) -> (bool, u64) {
@@ -639,14 +688,19 @@ impl RaftCore {
         (is_leader, inner.term)
     }
 
-    pub fn tick_append_entries(&self) -> Vec<RaftCoreEvent> {
+    pub fn tick_append_entries(&self) {
         let mut inner = self.inner.lock().unwrap();
         inner.tick_append_entries()
     }
 
-    pub fn check_leader_heartbeat(&self) -> Option<RaftCoreEvent> {
+    pub fn check_leader_heartbeat(&self) {
         let mut inner = self.inner.lock().unwrap();
         inner.check_leader_heartbeat()
+    }
+
+    pub fn check_election_timeout(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.check_election_timeout();
     }
 
     pub fn append_log<M>(&self, command: &M) -> Result<(u64, u64)>
@@ -669,6 +723,11 @@ impl RaftCore {
         let mut inner = self.inner.lock().unwrap();
         inner.restore(data);
     }
+
+    pub fn become_follower(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.become_follower();
+    }
 }
 
 pub struct AppendEntriesPeerReply {
@@ -687,17 +746,17 @@ impl ProgressContainer {
         }
     }
 
-    fn check_expired(&mut self, term: u64) {
-        if self.progress.is_none() {
-            return;
-        }
+    // fn check_expired(&mut self, term: u64) {
+    //     if self.progress.is_none() {
+    //         return;
+    //     }
 
-        let expired = self.progress.as_ref().unwrap().is_expired(term);
+    //     let expired = self.progress.as_ref().unwrap().is_expired(term);
 
-        if expired {
-            self.progress = Option::None;
-        }
-    }
+    //     if expired {
+    //         self.progress = Option::None;
+    //     }
+    // }
 
     fn contains(&self) -> bool {
         self.progress.is_some()
@@ -714,9 +773,14 @@ impl ProgressContainer {
     fn get_mut(&mut self) -> &mut Progress {
         self.progress.as_mut().unwrap()
     }
+
+    fn get(&self) -> &Progress {
+        self.progress.as_ref().unwrap()
+    }
 }
 
 struct Progress {
+    started_at: SystemTime,
     term: u64,
     failed_count: usize,
     succeed_count: usize,
@@ -725,6 +789,7 @@ struct Progress {
 impl Progress {
     fn new(term: u64) -> Progress {
         Progress {
+            started_at: SystemTime::now(),
             term,
             failed_count: 0,
             succeed_count: 0,
@@ -754,6 +819,10 @@ pub fn get_heartbeat_timeout() -> Duration {
 
 pub fn get_heartbeat_delay() -> Duration {
     HEARTBEAT_INTERVAL
+}
+
+pub fn get_election_timeout() -> Duration {
+    ELECTION_TIMEOUT
 }
 
 fn randomize_duration(duration: Duration) -> Duration {

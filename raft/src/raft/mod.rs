@@ -3,7 +3,9 @@ use std::sync::atomic::Ordering::SeqCst;
 use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::Arc;
 
-use futures::channel::mpsc::UnboundedSender;
+use futures::channel::mpsc::{unbounded, UnboundedSender};
+use futures::executor::{ThreadPool, ThreadPoolBuilder};
+use futures::StreamExt;
 use futures_timer::Delay;
 
 #[cfg(test)]
@@ -16,7 +18,7 @@ mod tests;
 
 use self::errors::*;
 use self::persister::*;
-use self::raft_core::RequestVoteData;
+use self::raft_core::{PeerStatus, RequestVoteData, get_election_timeout};
 use crate::proto::raftpb::*;
 use crate::raft::raft_core::{
     get_heartbeat_delay, get_heartbeat_timeout, AppendEntriesData, AppendEntriesPeerReply,
@@ -68,7 +70,6 @@ pub struct Raft {
     // Look at the paper's Figure 2 for a description of what
     // state a Raft server must maintain.
     raft_core: Arc<RaftCore>,
-    event_handler: Arc<RaftEventHandler>,
     stop: Arc<AtomicBool>,
 }
 
@@ -91,56 +92,68 @@ impl Raft {
 
         // Your initialization code here (2A, 2B, 2C).
 
-        let peer = &peers[me];
+        // let peer = &peers[me];
+        let (sender, mut receiver) = unbounded::<RaftCoreEvent>();
+        let stop = Arc::new(AtomicBool::new(false));
+        let pool = Arc::new(
+            ThreadPoolBuilder::new().create().unwrap()
+        );
 
-        let raft_core = Arc::new(RaftCore::new(me, peers.len(), persister));
+        let raft_core = Arc::new(RaftCore::new(me, peers.len(), persister, sender));
+        let stop_clone = stop.clone();
+        let pool_clone = pool.clone();
+
         let event_handler = Arc::new(RaftEventHandler::new(
             peers.clone(),
             raft_core.clone(),
             apply_ch,
+            stop_clone,
+            pool_clone
         ));
-        let stop = Arc::new(AtomicBool::new(false));
 
-        let raft_core_clone = raft_core.clone();
-        let event_handler_clone = event_handler.clone();
+        // let raft_core_clone = raft_core.clone();
+        // let stop_clone = stop.clone();
+
+        // peer.spawn(async move {
+        //     while !stop_clone.load(SeqCst) {
+        //         Delay::new(get_heartbeat_timeout()).await;
+        //         raft_core_clone.check_leader_heartbeat();
+        //     }
+        // });
+
+        // let raft_core_clone = raft_core.clone();
+        // let stop_clone = stop.clone();
+
+        // peer.spawn(async move {
+        //     while !stop_clone.load(SeqCst) {
+        //         Delay::new(get_heartbeat_delay()).await;
+        //         raft_core_clone.tick_append_entries();
+        //     }
+        // });
+
+        // let event_handler_clone = event_handler.clone();
         let stop_clone = stop.clone();
 
-        peer.spawn(async move {
+        pool.spawn_ok(async move {
             while !stop_clone.load(SeqCst) {
-                Delay::new(get_heartbeat_timeout()).await;
-                let events = raft_core_clone.check_leader_heartbeat();
-                for event in events {
-                    event_handler_clone.handle(event);
-                }
+                let msg = receiver.next().await.unwrap();
+                event_handler.handle(msg);
             }
         });
 
-        let raft_core_clone = raft_core.clone();
-        let event_handler_clone = event_handler.clone();
-        let stop_clone = stop.clone();
+        raft_core.restore(&raft_state);
+        raft_core.become_follower();
 
-        peer.spawn(async move {
-            while !stop_clone.load(SeqCst) {
-                Delay::new(get_heartbeat_delay()).await;
-                let events = raft_core_clone.tick_append_entries();
-                for event in events {
-                    event_handler_clone.handle(event);
-                }
-            }
-        });
-
-        let mut rf = Raft {
+        Raft {
             peers,
             me,
             raft_core,
-            event_handler,
             stop,
-        };
+        }
 
         // initialize from state persisted before a crash
-        rf.restore(&raft_state);
-
-        rf
+        // rf.restore(&raft_state);
+        // rf
     }
 
     fn kill(&self) {
@@ -168,11 +181,7 @@ impl Raft {
     }
 
     fn handle_append_entries(&self, args: AppendEntriesArgs) -> AppendEntriesReply {
-        let result = self.raft_core.handle_append_entries_request(args);
-        for event in result.1 {
-            self.event_handler.handle(event);
-        }
-        result.0
+        self.raft_core.handle_append_entries_request(args)
     }
 
     /// save Raft's persistent state to stable storage,
@@ -292,14 +301,11 @@ impl Raft {
 }
 
 struct RaftEventHandler {
-    inner: RaftEventHandlerInner,
-}
-
-#[derive(Clone)]
-struct RaftEventHandlerInner {
     peers: Vec<RaftClient>,
     raft_core: Arc<RaftCore>,
     apply_ch: UnboundedSender<ApplyMsg>,
+    stop: Arc<AtomicBool>,
+    pool: Arc<ThreadPool>,
 }
 
 impl RaftEventHandler {
@@ -307,44 +313,75 @@ impl RaftEventHandler {
         peers: Vec<RaftClient>,
         raft_core: Arc<RaftCore>,
         apply_ch: UnboundedSender<ApplyMsg>,
+        stop: Arc<AtomicBool>,
+        pool: Arc<ThreadPool>,
     ) -> RaftEventHandler {
         RaftEventHandler {
-            inner: RaftEventHandlerInner {
-                peers,
-                raft_core,
-                apply_ch,
-            },
+            peers,
+            raft_core,
+            apply_ch,
+            stop,
+            pool,
         }
     }
 
     fn handle(&self, event: RaftCoreEvent) {
-        let inner = self.inner.clone();
-        RaftEventHandler::handle_inner(inner, event);
-    }
-
-    fn handle_inner(inner: RaftEventHandlerInner, event: RaftCoreEvent) {
         match event {
-            RaftCoreEvent::RequestVote { data } => RaftEventHandler::on_request_vote(inner, data),
-            RaftCoreEvent::AppendEntries { data } => {
-                RaftEventHandler::on_append_entries(inner, data)
-            }
-            RaftCoreEvent::CommitMessage { index, data } => {
-                RaftEventHandler::on_commit_message(inner, index, data)
-            }
+            RaftCoreEvent::AppendEntries { data } => self.on_append_entries(data),
+            RaftCoreEvent::CommitMessage { index, data } => self.on_commit_message(index, data),
+            RaftCoreEvent::BecomeCandidate { data } => self.on_become_candidate(data),
+            RaftCoreEvent::BecomeFollower => self.on_become_follower(),
+            RaftCoreEvent::BecomeLeader => self.on_become_leader(),
         }
     }
 
-    fn on_request_vote(inner: RaftEventHandlerInner, data: RequestVoteData) {
-        for i in 0..inner.peers.len() {
+    fn on_become_leader(&self) {
+        let stop = self.stop.clone();
+        let raft = self.raft_core.clone();
+
+        self.pool.spawn_ok(async move {
+            loop {
+                let stop = stop.load(SeqCst);
+                let is_leader = raft.get_peer_status() == PeerStatus::Leader;
+                if stop || !is_leader {
+                    return;
+                }
+                Delay::new(get_heartbeat_delay()).await;
+                raft.tick_append_entries();
+            }
+        });
+    }
+
+    fn on_become_candidate(&self, data: RequestVoteData) {
+        let stop = self.stop.clone();
+        let raft = self.raft_core.clone();
+
+        self.pool.spawn_ok(async move {
+            loop {
+                let stop = stop.load(SeqCst);
+                let is_candidate = raft.get_peer_status() == PeerStatus::Candidate;
+                if stop || !is_candidate {
+                    return;
+                }
+                Delay::new(get_election_timeout()).await;
+                raft.check_election_timeout();
+            }
+        });
+
+        self.send_request_vote(data);
+    }
+
+    fn send_request_vote(&self, data: RequestVoteData) {
+        for i in 0..self.peers.len() {
             if i == data.me {
                 continue;
             }
 
-            let peer = &inner.peers[i];
-            let raft_clone = inner.raft_core.clone();
+            let peer = &self.peers[i];
+            let raft_clone = self.raft_core.clone();
             let peer_clone = peer.clone();
 
-            peer.spawn(async move {
+            self.pool.spawn_ok(async move {
                 let args = RequestVoteArgs {
                     term: data.term,
                     candidate_id: data.me as u32,
@@ -357,20 +394,35 @@ impl RaftEventHandler {
         }
     }
 
-    fn on_commit_message(inner: RaftEventHandlerInner, index: u64, data: Vec<u8>) {
-        inner
-            .apply_ch
+    fn on_become_follower(&self) {
+        let stop = self.stop.clone();
+        let raft = self.raft_core.clone();
+
+        self.pool.spawn_ok(async move {
+            loop {
+                let stop = stop.load(SeqCst);
+                let is_follower = raft.get_peer_status() == PeerStatus::Follower;
+                if stop || !is_follower {
+                    return;
+                }
+                Delay::new(get_heartbeat_timeout()).await;
+                raft.check_leader_heartbeat();
+            }
+        });
+    }
+
+    fn on_commit_message(&self, index: u64, data: Vec<u8>) {
+        self.apply_ch
             .unbounded_send(ApplyMsg::Command { data, index })
             .unwrap();
     }
 
-    fn on_append_entries(inner: RaftEventHandlerInner, data: AppendEntriesData) {
-        let peer = &inner.peers[data.peer];
-        let raft_clone = inner.raft_core.clone();
+    fn on_append_entries(&self, data: AppendEntriesData) {
+        let peer = &self.peers[data.peer];
+        let raft_clone = self.raft_core.clone();
         let peer_clone = peer.clone();
-        let inner_clone = inner.clone();
 
-        peer.spawn(async move {
+        self.pool.spawn_ok(async move {
             let entries: Vec<_> = data
                 .entries
                 .into_iter()
@@ -401,35 +453,9 @@ impl RaftEventHandler {
                     entries_len,
                 });
 
-            let events = raft_clone.handle_append_entries_result(data.peer, result);
-            for event in events {
-                RaftEventHandler::handle_inner(inner_clone.clone(), event);
-            }
+            raft_clone.handle_append_entries_result(data.peer, result);
         });
     }
-
-    // fn on_heartbeat(&self, me: usize, term: u64) {
-    //     for i in 0..self.peers.len() {
-    //         if i == me { continue; }
-
-    //         let peer = &self.peers[i];
-    //         let raft_clone = self.raft_core.clone();
-    //         let peer_clone = peer.clone();
-
-    //         peer.spawn(async move {
-    //             let args = AppendEntriesArgs {
-    //                 term,
-    //                 leader_id: me as u32,
-    //                 entries: Vec::with_capacity(0),
-    //                 leader_commit: 0,
-    //                 prev_log_idx: 0,
-    //                 prev_log_term: 0,
-    //             };
-    //             let result = peer_clone.append_entries(&args).await.map_err(Error::Rpc);
-    //             raft_clone.handle_heartbeat_result(i, result);
-    //         });
-    //     }
-    // }
 }
 
 // Choose concurrency paradigm.

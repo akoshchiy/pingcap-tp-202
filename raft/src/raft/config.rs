@@ -427,7 +427,7 @@ impl Config {
                 info!("TEST log insert, peer#{}, index: {}, entry: {:?}", i, index, entry);
 
                 log.insert(index, entry);
-                
+
                 if index > s.max_index {
                     s.max_index = index;
                 }
