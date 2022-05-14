@@ -421,9 +421,13 @@ impl Config {
                 }
                 let log = &mut s.logs[i];
                 if index > 1 && log.get(&(index - 1)).is_none() {
-                    panic!("server {} apply out of order {}", i, index);
+                    panic!("server {} apply out of order {}, logs: {:?}", i, index, log);
                 }
+
+                info!("TEST log insert, peer#{}, index: {}, entry: {:?}", i, index, entry);
+
                 log.insert(index, entry);
+                
                 if index > s.max_index {
                     s.max_index = index;
                 }

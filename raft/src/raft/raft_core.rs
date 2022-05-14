@@ -89,6 +89,7 @@ struct InnerRaft {
     next_index: Vec<u64>,
     match_index: Vec<u64>,
     commit_index: u64,
+    last_applied: u64,
     persister: Box<dyn Persister>,
 }
 
@@ -108,6 +109,7 @@ impl InnerRaft {
             next_index: vec![0; peers_count],
             match_index: vec![0; peers_count],
             commit_index: 0,
+            last_applied: 0,
             persister,
         }
     }
@@ -201,11 +203,9 @@ impl InnerRaft {
                 }
             }
             if match_count >= self.quorum {
-                self.commit_index = i;
-                events.push(RaftCoreEvent::CommitMessage {
-                    index: i,
-                    data: self.get_log_entry(i).unwrap().data.clone(),
-                });
+                for e in self.apply_commit(i) {
+                    events.push(e);
+                }
             }
         }
 
@@ -367,13 +367,9 @@ impl InnerRaft {
             let current_commit_idx = self.commit_index;
 
             if args.leader_commit > current_commit_idx {
-                self.commit_index = std::cmp::min(args.leader_commit, self.log.len() as u64);
-
-                for i in current_commit_idx + 1..=self.commit_index {
-                    events.push(RaftCoreEvent::CommitMessage {
-                        index: i,
-                        data: self.get_log_entry(i).unwrap().data.clone(),
-                    });
+                let new_commit_index = std::cmp::min(args.leader_commit, self.log.len() as u64);
+                for e in self.apply_commit(new_commit_index) {
+                    events.push(e);
                 }
             }
         }
@@ -403,6 +399,8 @@ impl InnerRaft {
                 index: log_entry_idx as u64,
             };
 
+            info!("peer#{} - replicate log entry: {:?}", self.me, &log_entry);
+
             if log_entry_idx > self.log.len() {
                 self.log.push(log_entry);
             } else {
@@ -411,8 +409,6 @@ impl InnerRaft {
 
             log_entry_idx += 1;
         }
-
-        info!("peer#{} - replicate log: {:?}", self.me, self.log);
     }
 
     fn matches_log_term(&self, args: &AppendEntriesArgs) -> bool {
@@ -524,11 +520,11 @@ impl InnerRaft {
             data,
             index,
         };
-        self.log.push(entry);
         info!(
-            "peer#{} - append_log, term: {}, index: {}, data: {:?}, log: {:?}",
-            self.me, self.term, index, msg, self.log
+            "peer#{} - append_log, term: {}, entry: {:?}",
+            self.me, self.term, &entry
         );
+        self.log.push(entry);
         self.persist();
         (index, self.term)
     }
@@ -552,10 +548,38 @@ impl InnerRaft {
 
     fn restore(&mut self, data: &[u8]) {
         let state: PersistState = labcodec::decode(data).unwrap();
-
         self.term = state.term;
         self.log = state.log;
         self.voted_for = state.voted_for;
+    }
+
+    fn apply_commit(&mut self, commit_index: u64) -> Vec<RaftCoreEvent> {
+        if self.commit_index > commit_index {
+            return Vec::with_capacity(0);
+        }
+
+        self.commit_index = commit_index;
+
+        info!("peer#{} - apply_commit to index {}", self.me, commit_index);
+
+        let mut events = Vec::new();
+
+        while self.commit_index > self.last_applied {
+            let idx = self.last_applied + 1;
+
+            let entry = self.get_log_entry(idx).unwrap();
+
+            info!("peer#{} - apply_state entry: {:?}", self.me, entry);
+
+            events.push(RaftCoreEvent::CommitMessage {
+                index: idx,
+                data: entry.data.clone(),
+            });
+
+            self.last_applied = idx;
+        }
+
+        events
     }
 }
 

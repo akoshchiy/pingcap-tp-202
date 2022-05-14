@@ -1,10 +1,9 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::mpsc::{sync_channel, Receiver};
-use std::sync::{Arc};
+use std::sync::Arc;
 
 use futures::channel::mpsc::UnboundedSender;
-use futures::SinkExt;
 use futures_timer::Delay;
 
 #[cfg(test)]
@@ -96,7 +95,6 @@ impl Raft {
 
         let raft_core = Arc::new(RaftCore::new(me, peers.len(), persister));
         let event_handler = Arc::new(RaftEventHandler::new(
-            me,
             peers.clone(),
             raft_core.clone(),
             apply_ch,
@@ -299,7 +297,6 @@ struct RaftEventHandler {
 
 #[derive(Clone)]
 struct RaftEventHandlerInner {
-    me: usize,
     peers: Vec<RaftClient>,
     raft_core: Arc<RaftCore>,
     apply_ch: UnboundedSender<ApplyMsg>,
@@ -307,14 +304,12 @@ struct RaftEventHandlerInner {
 
 impl RaftEventHandler {
     fn new(
-        me: usize,
         peers: Vec<RaftClient>,
         raft_core: Arc<RaftCore>,
         apply_ch: UnboundedSender<ApplyMsg>,
     ) -> RaftEventHandler {
         RaftEventHandler {
             inner: RaftEventHandlerInner {
-                me,
                 peers,
                 raft_core,
                 apply_ch,
@@ -363,17 +358,10 @@ impl RaftEventHandler {
     }
 
     fn on_commit_message(inner: RaftEventHandlerInner, index: u64, data: Vec<u8>) {
-        let peer = &inner.peers[inner.me];
-        let mut apply_ch = inner.apply_ch.clone();
-
-        info!("peer#{} - commit msg, idx: {}, data: {:?}", inner.me, index, &data);
-
-        peer.spawn(async move {
-            apply_ch
-                .send(ApplyMsg::Command { data, index })
-                .await
-                .unwrap();
-        });
+        inner
+            .apply_ch
+            .unbounded_send(ApplyMsg::Command { data, index })
+            .unwrap();
     }
 
     fn on_append_entries(inner: RaftEventHandlerInner, data: AppendEntriesData) {
