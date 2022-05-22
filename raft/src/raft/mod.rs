@@ -356,8 +356,8 @@ impl RaftEventHandler {
                     info!("peer#{} - stopping leader heartbeat loop", me);
                     return;
                 }
-                Delay::new(get_heartbeat_delay()).await;
                 raft.tick_append_entries();
+                Delay::new(get_heartbeat_delay()).await;
             }
         });
     }
@@ -452,14 +452,15 @@ impl RaftEventHandler {
                 .into_iter()
                 .map(|entry| EntryItem {
                     term: entry.term,
-                    index: entry.index,
+                    string_data: entry.string_data,
                     data: entry.data,
                 })
                 .collect();
 
-            let entries_len = entries.len();
+            // let entries_len = entries.len();
 
             let term = data.term;
+            let match_index_to_set = data.match_index_to_set;
 
             let args = AppendEntriesArgs {
                 term: data.term,
@@ -477,7 +478,7 @@ impl RaftEventHandler {
                 .map(|r| AppendEntriesPeerReply {
                     reply: r,
                     request_term: term,
-                    entries_len,
+                    match_index_to_set,
                 });
 
             raft_clone.handle_append_entries_result(data.peer, result);

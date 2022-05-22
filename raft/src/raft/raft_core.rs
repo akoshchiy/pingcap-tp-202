@@ -1,5 +1,6 @@
 use futures::channel::mpsc::UnboundedSender;
 use rand::Rng;
+use std::fmt::{Debug, Display};
 use std::ops::Add;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
@@ -12,7 +13,7 @@ use super::persister::Persister;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(150);
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(300);
-pub const ELECTION_TIMEOUT: Duration = Duration::from_millis(500);
+pub const ELECTION_TIMEOUT: Duration = Duration::from_millis(200);
 
 #[derive(Clone, Debug)]
 pub struct DebugState {
@@ -57,6 +58,7 @@ pub struct AppendEntriesData {
     pub prev_log_term: u64,
     pub entries: Vec<LogEntry>,
     pub leader_commit: u64,
+    pub match_index_to_set: u64,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -74,25 +76,7 @@ pub struct PersistState {
     #[prost(message, repeated, tag = "2")]
     pub log: Vec<LogEntry>,
     #[prost(message, tag = "3")]
-    pub voted_for: Option<Vote>,
-}
-
-#[derive(Copy, Clone, PartialEq, Message)]
-pub struct Vote {
-    #[prost(uint64, tag = "1")]
-    pub peer: u64,
-    #[prost(uint64, tag = "2")]
-    pub term: u64,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct LogEntry {
-    #[prost(bytes, tag = "1")]
-    pub data: Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub term: u64,
-    #[prost(uint64, tag = "3")]
-    pub index: u64,
+    pub voted_for: Option<u64>,
 }
 
 pub struct RaftCore {
@@ -106,10 +90,10 @@ struct InnerRaft {
     quorum: usize,
     term: u64,
     status: PeerStatus,
-    voted_for: Option<Vote>,
+    voted_for: Option<u64>,
     received_heartbeat_time: Option<SystemTime>,
-    vote_progress: ProgressContainer,
-    log: Vec<LogEntry>,
+    vote_progress: Option<VoteProgress>,
+    log: LogContainer,
     next_index: Vec<u64>,
     match_index: Vec<u64>,
     commit_index: u64,
@@ -134,8 +118,8 @@ impl InnerRaft {
             status: PeerStatus::Init,
             voted_for: None,
             received_heartbeat_time: None,
-            vote_progress: ProgressContainer::new(),
-            log: Vec::new(),
+            vote_progress: Option::None,
+            log: LogContainer::new(Vec::new()),
             next_index: vec![0; peers_count],
             match_index: vec![0; peers_count],
             commit_index: 0,
@@ -153,7 +137,7 @@ impl InnerRaft {
         if term != self.term {
             self.term = term;
             self.voted_for = Option::None;
-            self.vote_progress.clear();
+            self.vote_progress = Option::None;
         }
     }
 
@@ -174,11 +158,13 @@ impl InnerRaft {
             let next_index = self.next_index[i];
             let prev_log_index = next_index - 1;
             let prev_log_term = self
-                .get_log_entry(prev_log_index)
+                .log
+                .get_entry(prev_log_index)
                 .map(|e| e.term)
                 .unwrap_or(0);
 
-            let entries = self.log[(next_index - 1) as usize..].to_vec();
+            let entries = self.log.copy_from(next_index);
+            let match_index_to_set = prev_log_index + entries.len()as u64;
 
             self.send_event(RaftCoreEvent::AppendEntries {
                 data: AppendEntriesData {
@@ -189,6 +175,7 @@ impl InnerRaft {
                     prev_log_term,
                     entries,
                     leader_commit: self.commit_index,
+                    match_index_to_set,
                 },
             });
         }
@@ -214,53 +201,42 @@ impl InnerRaft {
         }
 
         if !reply.success {
-            let log: Vec<_> = self.log.iter().map(|e| (e.index, e.term)).collect();
-
-            info!(
-                "peer#{} - append_entries response conflict, peer:{}, conflict_idx: {}, conflict_term: {}, log: {:?}",
-                self.me, peer, reply.conflicting_entry_idx, reply.conflicting_entry_term, log
-            );
-
             if reply.conflicting_entry_term > 0 {
-                let idx = self.find_last_for_term(reply.conflicting_entry_term);
-                // info!("peer#{} - FIND LAST: {}", self.me, idx);
+                let idx = self
+                    .log
+                    .find_last_idx_for_term(reply.conflicting_entry_term);
                 self.next_index[peer] = if idx > 0 {
-                    // std::cmp::min(self.log.len() as u64, idx + 1)
                     idx + 1
                 } else {
-                    // std::cmp::min(self.log.len() as u64, reply.conflicting_entry_idx)
                     reply.conflicting_entry_idx
                 };
             } else {
-                // self.next_index[peer] = std::cmp::min(self.log.len() as u64, reply.conflicting_entry_idx);
                 self.next_index[peer] = reply.conflicting_entry_idx;
             }
 
-            info!("peer#{} - SET NEXT_INDEX FOR PEER[{}] = {}", self.me, peer, self.next_index[peer]);
-            // self.next_index[peer] = self.next_index[peer] - 1;
-
-            // let has_conflict_entry = self
-            //     .get_log_entry(reply.conflicting_entry_idx)
-            //     .map(|e| e.term == reply.conflicting_entry_term)
-            //     .unwrap_or(false);
-
-            // self.next_index[peer] = if has_conflict_entry {
-            //     self.find_last_for_term(reply.conflicting_entry_term)
-            // } else {
-            //     self.find_first_for_term(reply.conflicting_entry_term)
-            // };
+            info!(
+                "peer#{} - append_entries response conflict, peer:{}, conflict_idx: {}, conflict_term: {}, set_index:{}, log: {}",
+                self.me,
+                peer,
+                reply.conflicting_entry_idx,
+                reply.conflicting_entry_term,
+                self.next_index[peer],
+                self.log
+            );
 
             return;
         }
 
-        let next_idx = self.next_index[peer];
-        self.next_index[peer] = next_idx + peer_reply.entries_len as u64;
-        self.match_index[peer] = self.next_index[peer] - 1;
+        // let next_idx = self.next_index[peer];
+        self.next_index[peer] = peer_reply.match_index_to_set + 1;
+        self.match_index[peer] = peer_reply.match_index_to_set;
 
-        info!("peer#{} - SET NEXT_INDEX FOR PEER[{}] = {}", self.me, peer, self.next_index[peer]);
+        info!(
+            "peer#{} - append_entries complete, peer: {}, next_index: {}",
+            self.me, peer, self.next_index[peer]
+        );
 
-
-        for i in self.commit_index + 1..=self.get_log_last_index() {
+        for i in self.commit_index + 1..=self.log.get_last_index() {
             let mut match_count = 1;
 
             for peer_idx in 0..self.peers_count {
@@ -304,11 +280,11 @@ impl InnerRaft {
     }
 
     fn check_election_timeout(&mut self) {
-        if self.status != PeerStatus::Candidate || !self.vote_progress.contains() {
+        if self.status != PeerStatus::Candidate || self.vote_progress.is_none() {
             return;
         }
 
-        let started_at = self.vote_progress.get().started_at;
+        let started_at = self.vote_progress.as_mut().unwrap().started_at;
         let duration_since = SystemTime::now().duration_since(started_at).unwrap();
 
         if duration_since > ELECTION_TIMEOUT {
@@ -330,14 +306,13 @@ impl InnerRaft {
             self.update_term(args.term);
         }
 
-        let last_entry = self.get_log_entry(self.log.len() as u64);
-        let last_log_idx = last_entry.map(|e| e.index).unwrap_or(0);
-        let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
+        let last_log_idx = self.log.get_last_index();
+        let last_log_term = self.log.get_last_entry().map(|e| e.term).unwrap_or(0);
 
         let matches_term = self.term == args.term;
         let already_voted = self
             .voted_for
-            .map(|v| v.term >= args.term && v.peer != args.candidate_id as u64)
+            .map(|v| v != args.candidate_id as u64)
             .unwrap_or(false);
         let not_expired_log = args.last_log_term > last_log_term
             || (args.last_log_term == last_log_term && args.last_log_index >= last_log_idx);
@@ -345,10 +320,7 @@ impl InnerRaft {
         let mut vote_granted = false;
 
         if matches_term && !already_voted && not_expired_log {
-            self.voted_for = Some(Vote {
-                peer: args.candidate_id as u64,
-                term: args.term,
-            });
+            self.voted_for = Some(args.candidate_id as u64);
             self.reset_heartbeat_timeout();
             vote_granted = true;
         }
@@ -381,7 +353,6 @@ impl InnerRaft {
 
     fn handle_append_entries_request(&mut self, args: AppendEntriesArgs) -> AppendEntriesReply {
         if args.term < self.term {
-            info!("peer#{} - FCUK YOU", self.me);
             return AppendEntriesReply {
                 term: self.term,
                 success: false,
@@ -396,7 +367,7 @@ impl InnerRaft {
 
         let mut succeed = false;
 
-        let (ok, conflict_entry) = self.check_entry_conflict(&args);
+        let (ok, conflict_entry) = self.log.check_entry_conflict(&args);
 
         if ok {
             succeed = true;
@@ -407,7 +378,7 @@ impl InnerRaft {
                 if log_insert_idx > self.log.len() as u64 || new_entries_idx > args.entries.len() {
                     break;
                 }
-                let mismatch_term = self.get_log_entry(log_insert_idx).unwrap().term
+                let mismatch_term = self.log.get_entry(log_insert_idx).unwrap().term
                     != args.entries[new_entries_idx - 1].term;
 
                 if mismatch_term {
@@ -424,18 +395,17 @@ impl InnerRaft {
             let current_commit_idx = self.commit_index;
 
             if args.leader_commit > current_commit_idx {
-                let new_commit_index = std::cmp::min(args.leader_commit, self.log.len() as u64);
+                let new_commit_index = std::cmp::min(args.leader_commit, self.log.len());
                 self.apply_commit(new_commit_index);
             }
         } else {
-            let entries: Vec<_> = self.log.iter().map(|e| (e.index, e.term)).collect();
             info!(
-                "peer#{} - append_entries conflict: {:?}, arg_prev_term: {}, arg_prev_idx: {}, logs: {:?}",
+                "peer#{} - append_entries conflict: {:?}, arg_prev_term: {}, arg_prev_idx: {}, logs: {}",
                 self.me,
                 conflict_entry.unwrap(),
                 args.prev_log_term,
                 args.prev_log_idx,
-                entries
+                self.log
             );
         }
 
@@ -455,96 +425,32 @@ impl InnerRaft {
         insert_idx: usize,
         new_entries_idx: usize,
     ) {
-        let mut log_entry_idx = insert_idx;
-
-        let mut indices_to_replicate = Vec::new();
+        let mut to_replicate = Vec::new();
 
         for i in new_entries_idx - 1..entries.len() {
             let entry = &entries[i];
             let log_entry = LogEntry {
                 data: entry.data.clone(),
+                string_data: entry.string_data.clone(),
                 term: entry.term,
-                index: log_entry_idx as u64,
             };
-
-            // info!("peer#{} - replicate log entry: {:?}", self.me, &log_entry);
-
-            indices_to_replicate.push(log_entry_idx);
-
-            if log_entry_idx > self.log.len() {
-                self.log.push(log_entry);
-            } else {
-                self.log[log_entry_idx - 1] = log_entry;
-            }
-
-            log_entry_idx += 1;
+            to_replicate.push(log_entry);
         }
 
-        info!(
-            "peer#{} - replicate log entries: {:?}",
-            self.me, indices_to_replicate
-        );
-    }
+        let range = LogEntryRange {
+            start_index: insert_idx as u64,
+            entries: to_replicate,
+        };
 
-    fn check_entry_conflict(&self, args: &AppendEntriesArgs) -> (bool, Option<ConflictEntry>) {
-        if args.prev_log_idx == 0 {
-            return (true, Option::None);
-        }
-
-        let missing_entries = args.prev_log_idx > self.log.len() as u64;
-
-        if missing_entries {
-            return (
-                false,
-                Option::Some(ConflictEntry {
-                    term: 0,
-                    index: self.get_log_last_index() + 1,
-                }),
-            );
-        }
-
-        let prev_entry = self.get_log_entry(args.prev_log_idx).unwrap();
-
-        if prev_entry.term != args.prev_log_term {
-            let conflict_term = prev_entry.term;
-            let mut conflict_idx = prev_entry.index;
-            loop {
-                let entry = self.get_log_entry(conflict_idx);
-                if entry.is_none() {
-                    break;
-                }
-                if conflict_term != entry.unwrap().term {
-                    break;
-                }
-                conflict_idx -= 1;
-            }
-            return (
-                false,
-                Option::Some(ConflictEntry {
-                    term: conflict_term,
-                    index: conflict_idx + 1,
-                }),
-            );
-        }
-
-        (true, Option::None)
-
-        // let matches = args.prev_log_idx <= self.log.len() as u64
-        //     && args.prev_log_term == self.get_log_entry(args.prev_log_idx).unwrap().term;
-
-        // if matches {
-        //     return (true, Option::None);
-        // }
-
-        // if  args.prev_log_idx <= self.log.len() as u64.
+        info!("peer#{} - replicate log entries: {}", self.me, &range);
+        self.log.push_range(range);
     }
 
     fn handle_request_vote_reply(&mut self, reply: RequestVoteReply) {
-        if !self.vote_progress.contains() {
+        if self.status != PeerStatus::Candidate {
             return;
         }
-
-        let progress = self.vote_progress.get_mut();
+        let progress = self.vote_progress.as_mut().unwrap();
         if !reply.vote_granted {
             info!(
                 "peer#{} - received vote reject, my.term: {}, resp.term: {}",
@@ -567,31 +473,20 @@ impl InnerRaft {
                 self.me, self.term
             );
             self.become_leader();
-            self.vote_progress.clear();
         }
-    }
-
-    fn find_last_for_term(&self, term: u64) -> u64 {
-        let mut idx = 0;
-        for entry in &self.log {
-            if entry.term == term {
-                idx = entry.index;
-            }
-        }
-        idx
-
-        // for i
     }
 
     fn become_leader(&mut self) {
         self.status = PeerStatus::Leader;
 
-        let last_index = self.get_log_last_index();
+        let last_index = self.log.get_last_index();
 
         for i in 0..self.peers_count {
             self.match_index[i] = 0;
             self.next_index[i] = last_index + 1;
         }
+        self.voted_for = Option::None;
+        self.vote_progress = Option::None;
         self.send_event(RaftCoreEvent::BecomeLeader);
     }
 
@@ -600,6 +495,8 @@ impl InnerRaft {
             return;
         }
         self.status = PeerStatus::Follower;
+        self.voted_for = Option::None;
+        self.vote_progress = Option::None;
         self.send_event(RaftCoreEvent::BecomeFollower);
     }
 
@@ -608,18 +505,14 @@ impl InnerRaft {
 
         self.status = PeerStatus::Candidate;
         self.term += 1;
-        self.vote_progress.start(Progress::new(self.term));
+        self.vote_progress = Option::Some(VoteProgress::new());
 
         // self-vote
-        self.voted_for = Some(Vote {
-            peer: self.me as u64,
-            term: self.term,
-        });
-        self.vote_progress.get_mut().update(true);
+        self.voted_for = Some(self.me as u64);
+        self.vote_progress.as_mut().unwrap().update(true);
 
-        let last_entry = self.get_last_log_entry();
-        let last_log_idx = last_entry.map(|e| e.index).unwrap_or(0);
-        let last_log_term = last_entry.map(|e| e.term).unwrap_or(0);
+        let last_log_idx = self.log.get_last_index();
+        let last_log_term = self.log.get_last_entry().map(|e| e.term).unwrap_or(0);
 
         self.persist();
 
@@ -634,36 +527,11 @@ impl InnerRaft {
         });
     }
 
-    fn get_log_last_index(&self) -> u64 {
-        if self.log.is_empty() {
-            return 0;
-        }
-        self.log[self.log.len() - 1].index
-    }
-
-    fn get_last_log_entry(&self) -> Option<&LogEntry> {
-        if self.log.is_empty() {
-            return Option::None;
-        }
-        self.get_log_entry(self.log.len() as u64)
-    }
-
-    fn get_log_entry(&self, index: u64) -> Option<&LogEntry> {
-        if index == 0 {
-            return None;
-        }
-        let vec_idx = (index - 1) as usize;
-        if vec_idx >= self.log.len() {
-            return None;
-        }
-        Some(&self.log[vec_idx])
-    }
-
     fn handle_request_vote_error(&mut self, err: Error) {
-        if !self.vote_progress.contains() {
+        if self.status != PeerStatus::Candidate {
             return;
         }
-        let progress = self.vote_progress.get_mut();
+        let progress = self.vote_progress.as_mut().unwrap();
         progress.update(false);
         warn!(
             "peer#{} - request_vote[term={}] error resp: {}",
@@ -677,17 +545,17 @@ impl InnerRaft {
     where
         M: labcodec::Message,
     {
-        let index = self.get_log_last_index() + 1;
         let entry = LogEntry {
             term: self.term,
             data,
-            index,
+            string_data: format!("{:?}", msg),
         };
+        self.log.append(entry);
+        let index = self.log.len();
         info!(
             "peer#{} - append_log, term: {}, index: {}, entry: {:?}",
             self.me, self.term, index, msg
         );
-        self.log.push(entry);
         self.persist();
         (index, self.term)
     }
@@ -699,7 +567,7 @@ impl InnerRaft {
     fn persist(&self) {
         let state = PersistState {
             term: self.term,
-            log: self.log.clone(),
+            log: self.log.logs.clone(),
             voted_for: self.voted_for.clone(),
         };
 
@@ -712,7 +580,7 @@ impl InnerRaft {
     fn restore(&mut self, data: &[u8]) {
         let state: PersistState = labcodec::decode(data).unwrap();
         self.term = state.term;
-        self.log = state.log;
+        self.log = LogContainer::new(state.log);
         self.voted_for = state.voted_for;
     }
 
@@ -730,7 +598,7 @@ impl InnerRaft {
         while self.commit_index > self.last_applied {
             let idx = self.last_applied + 1;
 
-            let entry = self.get_log_entry(idx).unwrap();
+            let entry = self.log.get_entry(idx).unwrap();
 
             // info!("peer#{} - apply_state index: {}", self.me, idx);
 
@@ -865,8 +733,8 @@ impl RaftCore {
             me: inner.me,
             term: inner.term,
             status: inner.status,
-            vote_progress: inner.vote_progress.contains(),
-            last_idx: inner.get_log_last_index(),
+            vote_progress: inner.vote_progress.is_some(),
+            last_idx: inner.log.get_last_index(),
             last_applied: inner.last_applied,
             commit_idx: inner.commit_index,
         }
@@ -880,65 +748,19 @@ impl RaftCore {
 pub struct AppendEntriesPeerReply {
     pub reply: AppendEntriesReply,
     pub request_term: u64,
-    pub entries_len: usize,
+    pub match_index_to_set: u64,
 }
 
-struct ProgressContainer {
-    progress: Option<Progress>,
-}
-
-impl ProgressContainer {
-    fn new() -> ProgressContainer {
-        ProgressContainer {
-            progress: Option::None,
-        }
-    }
-
-    // fn check_expired(&mut self, term: u64) {
-    //     if self.progress.is_none() {
-    //         return;
-    //     }
-
-    //     let expired = self.progress.as_ref().unwrap().is_expired(term);
-
-    //     if expired {
-    //         self.progress = Option::None;
-    //     }
-    // }
-
-    fn contains(&self) -> bool {
-        self.progress.is_some()
-    }
-
-    fn start(&mut self, progress: Progress) {
-        self.progress = Option::Some(progress);
-    }
-
-    fn clear(&mut self) {
-        self.progress = Option::None;
-    }
-
-    fn get_mut(&mut self) -> &mut Progress {
-        self.progress.as_mut().unwrap()
-    }
-
-    fn get(&self) -> &Progress {
-        self.progress.as_ref().unwrap()
-    }
-}
-
-struct Progress {
+struct VoteProgress {
     started_at: SystemTime,
-    term: u64,
     failed_count: usize,
     succeed_count: usize,
 }
 
-impl Progress {
-    fn new(term: u64) -> Progress {
-        Progress {
+impl VoteProgress {
+    fn new() -> VoteProgress {
+        VoteProgress {
             started_at: SystemTime::now(),
-            term,
             failed_count: 0,
             succeed_count: 0,
         }
@@ -946,10 +768,6 @@ impl Progress {
 
     fn succeed_count(&self) -> usize {
         self.succeed_count
-    }
-
-    fn is_expired(&self, term: u64) -> bool {
-        self.term < term
     }
 
     fn update(&mut self, success: bool) {
@@ -978,4 +796,176 @@ fn randomize_duration(duration: Duration) -> Duration {
 struct ConflictEntry {
     term: u64,
     index: u64,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct LogEntry {
+    #[prost(bytes, tag = "1")]
+    pub data: Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub term: u64,
+    #[prost(string, tag = "3")]
+    pub string_data: String,
+}
+
+struct LogContainer {
+    logs: Vec<LogEntry>,
+}
+
+impl Display for LogContainer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[")?;
+        for i in 0..self.logs.len() {
+            let entry = &self.logs[i];
+            write!(f, "[")?;
+            write!(f, "{},", i + 1)?;
+            write!(f, "{},", entry.term)?;
+            write!(f, "{}]", entry.string_data)?;
+
+            if i != self.logs.len() - 1 {
+                write!(f, ",")?;
+            }
+        }
+        f.write_str("]")
+    }
+}
+
+impl LogContainer {
+    fn new(logs: Vec<LogEntry>) -> LogContainer {
+        LogContainer { logs }
+    }
+
+    fn len(&self) -> u64 {
+        self.logs.len() as u64
+    }
+
+    fn copy_from(&self, start_index: u64) -> Vec<LogEntry> {
+        self.logs[(start_index - 1) as usize..].to_vec()
+    }
+
+    fn get_last_index(&self) -> u64 {
+        self.logs.len() as u64
+    }
+
+    fn get_entry(&self, index: u64) -> Option<&LogEntry> {
+        if index == 0 {
+            return None;
+        }
+        let vec_idx = (index - 1) as usize;
+        if vec_idx >= self.logs.len() {
+            return None;
+        }
+        Some(&self.logs[vec_idx])
+    }
+
+    fn get_last_entry(&self) -> Option<&LogEntry> {
+        self.get_entry(self.get_last_index())
+    }
+
+    fn find_last_idx_for_term(&self, term: u64) -> u64 {
+        for idx in (0..self.logs.len()).rev() {
+            let entry = &self.logs[idx];
+            if entry.term == term {
+                return (idx + 1) as u64;
+            }
+        }
+        return 0;
+    }
+
+    fn push(&mut self, index: u64, entry: LogEntry) {
+        let len = self.len();
+        if index <= len {
+            let log_idx = (index - 1) as usize;
+            self.logs[log_idx] = entry;
+            return;
+        }
+
+        if index != len + 1 {
+            panic!(
+                "pushing gap in logs, index: {}, len: {}, entry: {:?}",
+                index, len, entry
+            )
+        }
+
+        self.logs.push(entry);
+    }
+
+    fn push_range(&mut self, range: LogEntryRange) {
+        let mut idx = range.start_index;
+        for entry in range.entries {
+            self.push(idx, entry);
+            idx += 1;
+        }
+    }
+
+    fn append(&mut self, entry: LogEntry) {
+        self.push(self.get_last_index() + 1, entry);
+    }
+
+    fn check_entry_conflict(&self, args: &AppendEntriesArgs) -> (bool, Option<ConflictEntry>) {
+        if args.prev_log_idx == 0 {
+            return (true, Option::None);
+        }
+
+        let missing_entries = args.prev_log_idx > self.len();
+
+        if missing_entries {
+            return (
+                false,
+                Option::Some(ConflictEntry {
+                    term: 0,
+                    index: self.get_last_index() + 1,
+                }),
+            );
+        }
+
+        let prev_entry = self.get_entry(args.prev_log_idx).unwrap();
+
+        if prev_entry.term != args.prev_log_term {
+            let conflict_term = prev_entry.term;
+            let mut conflict_idx = args.prev_log_idx;
+            loop {
+                let entry = self.get_entry(conflict_idx);
+                if entry.is_none() {
+                    break;
+                }
+                if conflict_term != entry.unwrap().term {
+                    break;
+                }
+                conflict_idx -= 1;
+            }
+            return (
+                false,
+                Option::Some(ConflictEntry {
+                    term: conflict_term,
+                    index: conflict_idx + 1,
+                }),
+            );
+        }
+
+        (true, Option::None)
+    }
+}
+
+struct LogEntryRange {
+    start_index: u64,
+    entries: Vec<LogEntry>,
+}
+
+impl Display for LogEntryRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[")?;
+        for i in 0..self.entries.len() {
+            let entry = &self.entries[i];
+            write!(f, "[")?;
+            write!(f, "{},", i as u64 + self.start_index)?;
+            write!(f, "{},", entry.term)?;
+            write!(f, "{}]", entry.string_data)?;
+            if i != self.entries.len() - 1 {
+                write!(f, ",")?;
+            }
+        }
+        f.write_str("]")?;
+        Ok(())
+    }
 }

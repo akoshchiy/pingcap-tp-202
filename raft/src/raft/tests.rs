@@ -843,28 +843,27 @@ fn test_figure_8_unreliable_2c() {
         true,
     );
 
-    let rafts_clone = cfg.rafts.clone();
-    
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_millis(100));
-            let rafts: Vec<_> = rafts_clone.lock().unwrap().iter().cloned().collect();
-            for raft in &rafts {
-                match raft {
-                    Some(rf) => {
-                        let state = rf.get_debug_state();
-                        info!("PEER#{} DEBUG STATE: {:?}", state.me, state);
-                    },
-                    None => continue,
-                }
-            }
-        }
-    });
+    // let rafts_clone = cfg.rafts.clone();
+    // thread::spawn(move || {
+    //     loop {
+    //         thread::sleep(Duration::from_millis(100));
+    //         let rafts: Vec<_> = rafts_clone.lock().unwrap().iter().cloned().collect();
+    //         for raft in &rafts {
+    //             match raft {
+    //                 Some(rf) => {
+    //                     let state = rf.get_debug_state();
+    //                     info!("PEER#{} DEBUG STATE: {:?}", state.me, state);
+    //                 },
+    //                 None => continue,
+    //             }
+    //         }
+    //     }
+    // });
 
     let mut nup = servers;
     for iters in 0..1000 {
         if iters == 200 {
-            // cfg.net.set_long_reordering(true);
+            cfg.net.set_long_reordering(true);
         }
         let mut leader = None;
         for i in 0..servers {

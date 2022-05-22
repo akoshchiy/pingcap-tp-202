@@ -28,8 +28,8 @@ message AppendEntriesArgs {
 
 message EntryItem {
   uint64 term = 1;
-  uint64 index = 2;
-  bytes data = 3;
+  bytes data = 2;
+  string string_data = 3;
 }
 
 message AppendEntriesReply {
