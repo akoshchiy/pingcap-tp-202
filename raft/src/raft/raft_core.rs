@@ -164,7 +164,7 @@ impl InnerRaft {
                 .unwrap_or(0);
 
             let entries = self.log.copy_from(next_index);
-            let match_index_to_set = prev_log_index + entries.len()as u64;
+            let match_index_to_set = prev_log_index + entries.len() as u64;
 
             self.send_event(RaftCoreEvent::AppendEntries {
                 data: AppendEntriesData {
@@ -371,26 +371,8 @@ impl InnerRaft {
 
         if ok {
             succeed = true;
-
-            let mut log_insert_idx = args.prev_log_idx + 1;
-            let mut new_entries_idx = 1;
-            loop {
-                if log_insert_idx > self.log.len() as u64 || new_entries_idx > args.entries.len() {
-                    break;
-                }
-                let mismatch_term = self.log.get_entry(log_insert_idx).unwrap().term
-                    != args.entries[new_entries_idx - 1].term;
-
-                if mismatch_term {
-                    break;
-                }
-                log_insert_idx += 1;
-                new_entries_idx += 1;
-            }
-
-            if new_entries_idx <= args.entries.len() {
-                self.replicate_log_entries(&args.entries, log_insert_idx as usize, new_entries_idx);
-            }
+            
+            self.replicate_log_entries(&args);
 
             let current_commit_idx = self.commit_index;
 
@@ -419,27 +401,24 @@ impl InnerRaft {
         }
     }
 
-    fn replicate_log_entries(
-        &mut self,
-        entries: &[EntryItem],
-        insert_idx: usize,
-        new_entries_idx: usize,
-    ) {
-        let mut to_replicate = Vec::new();
+    fn replicate_log_entries(&mut self, args: &AppendEntriesArgs) {
+        let log_insert_idx = args.prev_log_idx + 1;
 
-        for i in new_entries_idx - 1..entries.len() {
-            let entry = &entries[i];
-            let log_entry = LogEntry {
-                data: entry.data.clone(),
-                string_data: entry.string_data.clone(),
-                term: entry.term,
-            };
-            to_replicate.push(log_entry);
-        }
+        self.log.truncate(args.prev_log_idx);
+
+        let entries: Vec<LogEntry> = args
+            .entries
+            .iter()
+            .map(|e| LogEntry {
+                data: e.data.clone(),
+                string_data: e.string_data.clone(),
+                term: e.term,
+            })
+            .collect();
 
         let range = LogEntryRange {
-            start_index: insert_idx as u64,
-            entries: to_replicate,
+            start_index: log_insert_idx,
+            entries,
         };
 
         info!("peer#{} - replicate log entries: {}", self.me, &range);
@@ -814,19 +793,21 @@ struct LogContainer {
 
 impl Display for LogContainer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("[")?;
-        for i in 0..self.logs.len() {
-            let entry = &self.logs[i];
-            write!(f, "[")?;
-            write!(f, "{},", i + 1)?;
-            write!(f, "{},", entry.term)?;
-            write!(f, "{}]", entry.string_data)?;
+        // f.write_str("[")?;
+        // for i in 0..self.logs.len() {
+        //     let entry = &self.logs[i];
+        //     write!(f, "[")?;
+        //     write!(f, "{},", i + 1)?;
+        //     write!(f, "{},", entry.term)?;
+        //     write!(f, "{}]", entry.string_data)?;
 
-            if i != self.logs.len() - 1 {
-                write!(f, ",")?;
-            }
-        }
-        f.write_str("]")
+        //     if i != self.logs.len() - 1 {
+        //         write!(f, ",")?;
+        //     }
+        // }
+        // f.write_str("]")
+        write!(f, "[]")?;
+        Ok(())
     }
 }
 
@@ -898,6 +879,10 @@ impl LogContainer {
         }
     }
 
+    fn truncate(&mut self, index: u64) {
+        self.logs.truncate(index as usize);
+    }
+
     fn append(&mut self, entry: LogEntry) {
         self.push(self.get_last_index() + 1, entry);
     }
@@ -954,18 +939,21 @@ struct LogEntryRange {
 
 impl Display for LogEntryRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("[")?;
-        for i in 0..self.entries.len() {
-            let entry = &self.entries[i];
-            write!(f, "[")?;
-            write!(f, "{},", i as u64 + self.start_index)?;
-            write!(f, "{},", entry.term)?;
-            write!(f, "{}]", entry.string_data)?;
-            if i != self.entries.len() - 1 {
-                write!(f, ",")?;
-            }
-        }
-        f.write_str("]")?;
+        // f.write_str("[")?;
+        // for i in 0..self.entries.len() {
+        //     let entry = &self.entries[i];
+        //     write!(f, "[")?;
+        //     write!(f, "{},", i as u64 + self.start_index)?;
+        //     write!(f, "{},", entry.term)?;
+        //     write!(f, "{}]", entry.string_data)?;
+        //     if i != self.entries.len() - 1 {
+        //         write!(f, ",")?;
+        //     }
+        // }
+        // f.write_str("]")?;
+        // let first = self.entries[0]
+        // write!(f, "[[idx={},term={}]..[idx={},term={}]]",)
+        write!(f, "[]")?;
         Ok(())
     }
 }

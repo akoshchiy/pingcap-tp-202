@@ -109,28 +109,7 @@ impl Raft {
             stop_clone,
             pool_clone,
         ));
-
-        // let raft_core_clone = raft_core.clone();
-        // let stop_clone = stop.clone();
-
-        // peer.spawn(async move {
-        //     while !stop_clone.load(SeqCst) {
-        //         Delay::new(get_heartbeat_timeout()).await;
-        //         raft_core_clone.check_leader_heartbeat();
-        //     }
-        // });
-
-        // let raft_core_clone = raft_core.clone();
-        // let stop_clone = stop.clone();
-
-        // peer.spawn(async move {
-        //     while !stop_clone.load(SeqCst) {
-        //         Delay::new(get_heartbeat_delay()).await;
-        //         raft_core_clone.tick_append_entries();
-        //     }
-        // });
-
-        // let event_handler_clone = event_handler.clone();
+        
         let stop_clone = stop.clone();
 
         pool.spawn_ok(async move {
