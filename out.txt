@@ -1,0 +1,1086 @@
+RUST_LOG=info cargo test -p raft -- --nocapture --test figurre_8_2c
+warning: associated function is never used: `restore`
+   --> raft/src/raft/mod.rs:200:8
+    |
+200 |     fn restore(&mut self, data: &[u8]) {
+    |        ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field is never read: `term`
+   --> raft/src/raft/raft_core.rs:932:5
+    |
+932 |     term: u64,
+    |     ^^^^^^^^^
+
+warning: associated function is never used: `is_expired`
+   --> raft/src/raft/raft_core.rs:951:8
+    |
+951 |     fn is_expired(&self, term: u64) -> bool {
+    |        ^^^^^^^^^^
+
+warning: `raft` (lib) generated 3 warnings
+warning: `raft` (lib test) generated 3 warnings (3 duplicates)
+    Finished test [unoptimized + debuginfo] target(s) in 0.15s
+     Running unittests src/lib.rs (target/debug/deps/raft-79802fcfa9ef1741)
+
+running 1 test
+test raft::tests::test_figurre_8_2c ... [2022-05-22T10:31:39Z INFO  raft::raft] peer#0 - starting handler loop
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#0 - starting follower heartbeat check loop
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#1 - starting handler loop
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#2 - starting handler loop
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#2 - starting follower heartbeat check loop
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#4 - starting handler loop
+
+[2022-05-22T10:31:39Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:39Z INFO  raft::raft::config] Test (2C): Figure 8 ...
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:40Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:40Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 0, candidate_term: 1, become follower
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 0, candidate_term: 1, become follower
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 1, candidate_term: 1, candidate_id: 1, last_log_idx: 0, last_log_term: 0, arg.last_log_idx: 0, arg.last_log_term: 0, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 1, candidate_term: 1, candidate_id: 1, last_log_idx: 0, last_log_term: 0, arg.last_log_idx: 0, arg.last_log_term: 0, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 0, candidate_term: 1, become follower
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 0, candidate_term: 1, become follower
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 1, candidate_term: 1, candidate_id: 1, last_log_idx: 0, last_log_term: 0, arg.last_log_idx: 0, arg.last_log_term: 0, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 1, candidate_term: 1, candidate_id: 1, last_log_idx: 0, last_log_term: 0, arg.last_log_idx: 0, arg.last_log_term: 0, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 3
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - received quorum approves, i am leader, term=1
+[2022-05-22T10:31:40Z INFO  raft::raft] peer#1 - starting leader heartbeat loop
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - append_log, term: 1, index: 1, entry: Entry { x: 15181472725285127664 }
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - tick append_entries, term: 1, next_index: [1, 1, 1, 1, 1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#0 - replicate log entries: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#2 - replicate log entries: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#4 - replicate log entries: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[0] = 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#3 - replicate log entries: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[2] = 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - apply_commit to index 1
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - apply_states: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[4] = 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[3] = 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - append_log, term: 1, index: 2, entry: Entry { x: 9128403960502040938 }
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - tick append_entries, term: 1, next_index: [2, 1, 2, 2, 2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#0 - replicate log entries: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#2 - replicate log entries: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#0 - apply_commit to index 1
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#2 - apply_commit to index 1
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#0 - apply_states: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#2 - apply_states: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[0] = 3
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#3 - replicate log entries: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[2] = 3
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#4 - replicate log entries: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 1
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - apply_commit to index 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#4 - apply_commit to index 1
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#3 - apply_states: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - apply_states: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#4 - apply_states: [1]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[3] = 3
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[4] = 3
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - tick append_entries, term: 1, next_index: [3, 1, 3, 3, 3]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#0 - apply_commit to index 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#2 - apply_commit to index 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#0 - apply_states: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#2 - apply_states: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[0] = 3
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#4 - apply_commit to index 2
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#3 - apply_states: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[2] = 3
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#4 - apply_states: [2]
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[3] = 3
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - SET NEXT_INDEX FOR PEER[4] = 3
+[2022-05-22T10:31:40Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:40Z INFO  raft::raft::raft_core] peer#1 - tick append_entries, term: 1, next_index: [3, 1, 3, 3, 3]
+[2022-05-22T10:31:40Z INFO  raft::raft] peer#1 - stopping leader heartbeat loop
+[2022-05-22T10:31:40Z INFO  raft::raft] peer#1 - stopping handler loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 384, initiating new vote
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 1, candidate_term: 2, become follower
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 2, candidate_term: 2, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 1, candidate_term: 2, become follower
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 2, candidate_term: 2, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 1, candidate_term: 2, become follower
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 2
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 2, candidate_term: 2, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 3
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - received quorum approves, i am leader, term=2
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - starting leader heartbeat loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - append_log, term: 2, index: 3, entry: Entry { x: 15082474752012476559 }
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 2, next_index: [3, 3, 3, 3, 3]
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - stopping leader heartbeat loop
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - stopping handler loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 400, initiating new vote
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 2, candidate_term: 3, become follower
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 3, candidate_term: 3, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 2, candidate_term: 3, become follower
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 3, candidate_term: 3, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=3
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 3, index: 3, entry: Entry { x: 5531883957852247843 }
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - starting handler loop
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 3, next_index: [3, 3, 3, 3, 3]
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:41Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 3, candidate_term: 3, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 3, arg.last_log_term: 2, matches_term: true, already_voted: true, not_expired_log: true ==  reject
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 3, candidate_term: 3, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 3, arg.last_log_term: 2, matches_term: true, already_voted: true, not_expired_log: true ==  reject
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - received vote reject, my.term: 3, resp.term: 3
+[2022-05-22T10:31:41Z INFO  raft::raft::raft_core] peer#4 - received vote reject, my.term: 3, resp.term: 3
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - last heartbeat: 584, initiating new vote
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#0 - stopping follower heartbeat check loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#0 - starting vote timeout loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 3, candidate_term: 4, become follower
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 3, candidate_term: 4, become follower
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 4, candidate_term: 4, candidate_id: 0, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 4, candidate_term: 4, candidate_id: 0, last_log_idx: 3, last_log_term: 2, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - received vote approve, current: 2
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - received vote reject, my.term: 4, resp.term: 4
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:42Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - last heartbeat: 360, initiating new vote
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#2 - stopping follower heartbeat check loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#2 - starting vote timeout loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 4, candidate_term: 5, become follower
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 4, candidate_term: 5, become follower
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 5, candidate_term: 5, candidate_id: 2, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 5, candidate_term: 5, candidate_id: 2, last_log_idx: 3, last_log_term: 2, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#0 - starting follower heartbeat check loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - received vote approve, current: 2
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - received vote reject, my.term: 5, resp.term: 5
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 5, candidate_term: 6, become follower
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 6, candidate_term: 6, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 3, arg.last_log_term: 2, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 5, candidate_term: 6, become follower
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 6, candidate_term: 6, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 3, arg.last_log_term: 2, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 2
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#2 - starting follower heartbeat check loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 3
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - received quorum approves, i am leader, term=6
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - starting leader heartbeat loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - append_log, term: 6, index: 4, entry: Entry { x: 7324934499641782060 }
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#1 - starting handler loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 6, next_index: [4, 4, 4, 4, 4]
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - stopping leader heartbeat loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - stopping handler loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#0 - stopping vote timeout loop
+[2022-05-22T10:31:42Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - last heartbeat: 381, initiating new vote
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#2 - stopping follower heartbeat check loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#2 - starting vote timeout loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 6, candidate_term: 7, become follower
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 1, candidate_term: 7, become follower
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 7, candidate_term: 7, candidate_id: 2, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 7, candidate_term: 7, candidate_id: 2, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - received vote approve, current: 2
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - received vote approve, current: 3
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - received quorum approves, i am leader, term=7
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#2 - starting leader heartbeat loop
+[2022-05-22T10:31:42Z INFO  raft::raft::raft_core] peer#2 - append_log, term: 7, index: 3, entry: Entry { x: 17457113500381700015 }
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - starting handler loop
+[2022-05-22T10:31:42Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#2 - stopping vote timeout loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#2 - tick append_entries, term: 7, next_index: [3, 3, 3, 3, 3]
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#2 - stopping leader heartbeat loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#2 - stopping handler loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 431, initiating new vote
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 6, candidate_term: 8, become follower
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 8, candidate_term: 8, candidate_id: 1, last_log_idx: 4, last_log_term: 6, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 7, candidate_term: 8, become follower
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 8, candidate_term: 8, candidate_id: 1, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 8, resp.term: 8
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 8, candidate_term: 9, become follower
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 8, candidate_term: 9, become follower
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 9, candidate_term: 9, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 4, arg.last_log_term: 6, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 9, candidate_term: 9, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 4, arg.last_log_term: 6, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 2
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 3
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - received quorum approves, i am leader, term=9
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#4 - starting leader heartbeat loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#2 - stopping vote timeout loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 9, next_index: [5, 5, 5, 5, 5]
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 6, arg_prev_idx: 4, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 6, arg_prev_idx: 4, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:0, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6)]
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[0] = 3
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:1, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6)]
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[1] = 3
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - append_log, term: 9, index: 5, entry: Entry { x: 16535870441695776936 }
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:43Z WARN  raft::raft::raft_core] peer#1 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 9, next_index: [3, 3, 5, 5, 5]
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#4 - stopping leader heartbeat loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#4 - stopping handler loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 317, initiating new vote
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 9, candidate_term: 10, become follower
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 3, candidate_term: 10, become follower
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 10, candidate_term: 10, candidate_id: 1, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 10, candidate_term: 10, candidate_id: 1, last_log_idx: 3, last_log_term: 3, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 10, resp.term: 10
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 10, candidate_term: 11, become follower
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 11, candidate_term: 11, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 3, arg.last_log_term: 3, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 10, candidate_term: 11, become follower
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 11, candidate_term: 11, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 3, arg.last_log_term: 3, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=11
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:43Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 11, index: 4, entry: Entry { x: 7200852750603463842 }
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:43Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 11, next_index: [4, 4, 4, 4, 4]
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#0 - last heartbeat: 369, initiating new vote
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#0 - stopping follower heartbeat check loop
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#0 - starting vote timeout loop
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 11, candidate_term: 12, become follower
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 11, candidate_term: 12, become follower
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 12, candidate_term: 12, candidate_id: 0, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 12, candidate_term: 12, candidate_id: 0, last_log_idx: 4, last_log_term: 11, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#0 - received vote approve, current: 2
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#0 - received vote reject, my.term: 12, resp.term: 12
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 12, candidate_term: 13, become follower
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 12, candidate_term: 13, become follower
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 13, candidate_term: 13, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 4, arg.last_log_term: 11, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 13, candidate_term: 13, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 4, arg.last_log_term: 11, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#0 - starting follower heartbeat check loop
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=13
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 13, index: 5, entry: Entry { x: 9263064901746776063 }
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 13, next_index: [5, 5, 5, 5, 5]
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 11, arg_prev_idx: 4, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 11, arg_prev_idx: 4, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - append_entries response conflict, peer:0, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13)]
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[0] = 3
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - append_entries response conflict, peer:1, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13)]
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[1] = 3
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:44Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 13, next_index: [3, 3, 5, 5, 5]
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:44Z INFO  raft::raft] peer#0 - stopping vote timeout loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 13, candidate_term: 14, become follower
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 13, candidate_term: 14, become follower
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 14, candidate_term: 14, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 5, arg.last_log_term: 13, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 14, candidate_term: 14, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 5, arg.last_log_term: 13, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=14
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 14, next_index: [6, 6, 6, 6, 6]
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 13, arg_prev_idx: 5, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 13, arg_prev_idx: 5, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - append_entries response conflict, peer:0, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13)]
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[0] = 3
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - append_entries response conflict, peer:1, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13)]
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[1] = 3
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 14, index: 6, entry: Entry { x: 15064313759988535472 }
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#2 - starting handler loop
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#2 - starting follower heartbeat check loop
+[2022-05-22T10:31:45Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 14, next_index: [3, 3, 6, 6, 6]
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:45Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#0 - last heartbeat: 316, initiating new vote
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#0 - stopping follower heartbeat check loop
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#0 - starting vote timeout loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 14, candidate_term: 15, become follower
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 7, candidate_term: 15, become follower
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 15, candidate_term: 15, candidate_id: 0, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 15, candidate_term: 15, candidate_id: 0, last_log_idx: 3, last_log_term: 7, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#0 - received vote approve, current: 2
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#0 - received vote reject, my.term: 15, resp.term: 15
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#2 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#2 - stopping follower heartbeat check loop
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#2 - starting vote timeout loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 15, candidate_term: 16, become follower
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 15, candidate_term: 16, become follower
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 16, candidate_term: 16, candidate_id: 2, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 3, arg.last_log_term: 7, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 16, candidate_term: 16, candidate_id: 2, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 3, arg.last_log_term: 7, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#0 - starting follower heartbeat check loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#2 - received vote approve, current: 2
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#2 - received vote approve, current: 3
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#2 - received quorum approves, i am leader, term=16
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#2 - starting leader heartbeat loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#2 - append_log, term: 16, index: 4, entry: Entry { x: 10369350113144694711 }
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#4 - starting handler loop
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:45Z INFO  raft::raft::raft_core] peer#2 - tick append_entries, term: 16, next_index: [4, 4, 4, 4, 4]
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#2 - stopping leader heartbeat loop
+[2022-05-22T10:31:45Z INFO  raft::raft] peer#2 - stopping handler loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 423, initiating new vote
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 16, candidate_term: 17, become follower
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 9, candidate_term: 17, become follower
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 17, candidate_term: 17, candidate_id: 1, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 17, candidate_term: 17, candidate_id: 1, last_log_idx: 5, last_log_term: 9, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 17, resp.term: 17
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 17, candidate_term: 18, become follower
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 17, candidate_term: 18, become follower
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 18, candidate_term: 18, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 5, arg.last_log_term: 9, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 18, candidate_term: 18, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 5, arg.last_log_term: 9, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 2
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 3
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - received quorum approves, i am leader, term=18
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - starting leader heartbeat loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - append_log, term: 18, index: 6, entry: Entry { x: 7346766046685628976 }
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - starting handler loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#0 - stopping vote timeout loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#2 - stopping vote timeout loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 18, next_index: [6, 6, 6, 6, 6]
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - stopping leader heartbeat loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - stopping handler loop
+[2022-05-22T10:31:46Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 18, candidate_term: 19, become follower
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 18, candidate_term: 19, become follower
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 19, candidate_term: 19, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 6, arg.last_log_term: 18, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 19, candidate_term: 19, candidate_id: 4, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 6, arg.last_log_term: 18, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 2
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 3
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - received quorum approves, i am leader, term=19
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - starting leader heartbeat loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - append_log, term: 19, index: 7, entry: Entry { x: 16149072387168436595 }
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 19, next_index: [7, 7, 7, 7, 7]
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 18, arg_prev_idx: 6, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 18, arg_prev_idx: 6, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:0, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19)]
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[0] = 3
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:1, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19)]
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[1] = 3
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:46Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 19, next_index: [3, 3, 7, 7, 7]
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - stopping leader heartbeat loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - stopping handler loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:46Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:47Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 2, resp: Rpc(Timeout)
+[2022-05-22T10:31:47Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 2, resp: Rpc(Timeout)
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 19, candidate_term: 15, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: false, already_voted: true, not_expired_log: true ==  reject
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 19, candidate_term: 15, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: false, already_voted: true, not_expired_log: true ==  reject
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - received vote reject, my.term: 15, resp.term: 15
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - received vote reject, my.term: 15, resp.term: 15
+[2022-05-22T10:31:47Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 3, resp: Rpc(Timeout)
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 680, initiating new vote
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 19, candidate_term: 20, become follower
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 20, candidate_term: 20, candidate_id: 1, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 15, candidate_term: 20, become follower
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 20, candidate_term: 20, candidate_id: 1, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 2, arg.last_log_term: 1, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 20, resp.term: 20
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 20, candidate_term: 21, become follower
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 20, candidate_term: 21, become follower
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 21, candidate_term: 21, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 21, candidate_term: 21, candidate_id: 3, last_log_idx: 2, last_log_term: 1, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=21
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 21, next_index: [7, 7, 7, 7, 7]
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 14, arg_prev_idx: 6, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 3 }, arg_prev_term: 14, arg_prev_idx: 6, logs: [(1, 1), (2, 1)]
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - append_entries response conflict, peer:0, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[0] = 3
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - append_entries response conflict, peer:1, conflict_idx: 3, conflict_term: 0, log: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:47Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[1] = 3
+[2022-05-22T10:31:47Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:47Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 4, resp: Rpc(Timeout)
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 21, next_index: [3, 3, 7, 7, 7]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#0 - replicate log entries: [3, 4, 5, 6]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#1 - replicate log entries: [3, 4, 5, 6]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[0] = 7
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[1] = 7
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 1
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_states: [1]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 2
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_states: [2]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 3
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_states: [3]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 4
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_states: [4]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 5
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_states: [5]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 6
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - apply_states: [6]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 21, index: 7, entry: Entry { x: 11498195147450417593 }
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - starting handler loop
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 21, next_index: [7, 7, 7, 7, 7]
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 408, initiating new vote
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 21, candidate_term: 22, become follower
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 19, candidate_term: 22, become follower
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 22, candidate_term: 22, candidate_id: 1, last_log_idx: 7, last_log_term: 19, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 22, candidate_term: 22, candidate_id: 1, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 22, resp.term: 22
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 22, candidate_term: 23, become follower
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 22, candidate_term: 23, become follower
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 23, candidate_term: 23, candidate_id: 4, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 7, arg.last_log_term: 19, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 23, candidate_term: 23, candidate_id: 4, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 7, arg.last_log_term: 19, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 2
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 3
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - received quorum approves, i am leader, term=23
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - starting leader heartbeat loop
+[2022-05-22T10:31:48Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 3, resp: Rpc(Timeout)
+[2022-05-22T10:31:48Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 23, next_index: [8, 8, 8, 8, 8]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 7 }, arg_prev_term: 19, arg_prev_idx: 7, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 7 }, arg_prev_term: 19, arg_prev_idx: 7, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:0, conflict_idx: 7, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19)]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[0] = 7
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:1, conflict_idx: 7, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19)]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[1] = 7
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 23, next_index: [7, 7, 8, 8, 8]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 14, index: 6 }, arg_prev_term: 18, arg_prev_idx: 6, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 14, index: 6 }, arg_prev_term: 18, arg_prev_idx: 6, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:1, conflict_idx: 6, conflict_term: 14, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19)]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[1] = 6
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:0, conflict_idx: 6, conflict_term: 14, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19)]
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[0] = 6
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - append_log, term: 23, index: 8, entry: Entry { x: 2842262499111298335 }
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - starting handler loop
+[2022-05-22T10:31:48Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 23, next_index: [6, 6, 8, 8, 8]
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - stopping leader heartbeat loop
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#4 - stopping handler loop
+[2022-05-22T10:31:48Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:49Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 367, initiating new vote
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 23, candidate_term: 24, become follower
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 23, candidate_term: 24, become follower
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 24, candidate_term: 24, candidate_id: 1, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 24, candidate_term: 24, candidate_id: 1, last_log_idx: 8, last_log_term: 23, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 24, resp.term: 24
+[2022-05-22T10:31:49Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 2, resp: Rpc(Timeout)
+[2022-05-22T10:31:49Z WARN  raft::raft::raft_core] peer#1 - request_vote[term=24] error resp: Rpc(Timeout)
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 24, candidate_term: 25, become follower
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 24, candidate_term: 25, become follower
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 25, candidate_term: 25, candidate_id: 4, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 8, arg.last_log_term: 23, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 25, candidate_term: 25, candidate_id: 4, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 8, arg.last_log_term: 23, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 2
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 3
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - received quorum approves, i am leader, term=25
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#4 - starting leader heartbeat loop
+[2022-05-22T10:31:49Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 2, resp: Rpc(Timeout)
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 25, next_index: [9, 9, 9, 9, 9]
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 7 }, arg_prev_term: 23, arg_prev_idx: 8, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 7 }, arg_prev_term: 23, arg_prev_idx: 8, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:0, conflict_idx: 7, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19), (8, 23)]
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[0] = 7
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:1, conflict_idx: 7, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19), (8, 23)]
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[1] = 7
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - append_log, term: 25, index: 9, entry: Entry { x: 5206738433810566158 }
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 25, next_index: [7, 7, 9, 9, 9]
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#4 - stopping leader heartbeat loop
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#4 - stopping handler loop
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:49Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 311, initiating new vote
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:49Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 25, candidate_term: 26, become follower
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 26, candidate_term: 26, candidate_id: 1, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:49Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:49Z WARN  raft::raft::raft_core] peer#2 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:49Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:50Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 4, resp: Rpc(Timeout)
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 26, candidate_term: 22, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 7, arg.last_log_term: 21, matches_term: false, already_voted: true, not_expired_log: true ==  reject
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 26, candidate_term: 22, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 7, arg.last_log_term: 21, matches_term: false, already_voted: true, not_expired_log: true ==  reject
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - received vote reject, my.term: 22, resp.term: 22
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - received vote reject, my.term: 22, resp.term: 22
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 26, candidate_term: 27, become follower
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 22, candidate_term: 27, become follower
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 27, candidate_term: 27, candidate_id: 1, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 27, candidate_term: 27, candidate_id: 1, last_log_idx: 7, last_log_term: 21, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 27, resp.term: 27
+[2022-05-22T10:31:50Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 27, candidate_term: 28, become follower
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 27, candidate_term: 28, become follower
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 28, candidate_term: 28, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 7, arg.last_log_term: 21, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 28, candidate_term: 28, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 7, arg.last_log_term: 21, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=28
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 28, index: 8, entry: Entry { x: 13089722402442761359 }
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#4 - starting handler loop
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:50Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 28, next_index: [8, 8, 8, 8, 8]
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:50Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 381, initiating new vote
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 28, candidate_term: 29, become follower
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 25, candidate_term: 29, become follower
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 29, candidate_term: 29, candidate_id: 1, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - request_vote, my term: 29, candidate_term: 29, candidate_id: 1, last_log_idx: 9, last_log_term: 25, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 29, resp.term: 29
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 29, candidate_term: 30, become follower
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 29, candidate_term: 30, become follower
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 30, candidate_term: 30, candidate_id: 4, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 9, arg.last_log_term: 25, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 30, candidate_term: 30, candidate_id: 4, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 9, arg.last_log_term: 25, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 2
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - received vote approve, current: 3
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - received quorum approves, i am leader, term=30
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#4 - starting leader heartbeat loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 30, next_index: [10, 10, 10, 10, 10]
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 7 }, arg_prev_term: 25, arg_prev_idx: 9, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 7 }, arg_prev_term: 25, arg_prev_idx: 9, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:0, conflict_idx: 7, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19), (8, 23), (9, 25)]
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[0] = 7
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - append_entries response conflict, peer:1, conflict_idx: 7, conflict_term: 0, log: [(1, 1), (2, 1), (3, 2), (4, 6), (5, 9), (6, 18), (7, 19), (8, 23), (9, 25)]
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - SET NEXT_INDEX FOR PEER[1] = 7
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - append_log, term: 30, index: 10, entry: Entry { x: 10917934591608996820 }
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:51Z WARN  raft::raft::raft_core] peer#2 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#4 - tick append_entries, term: 30, next_index: [7, 7, 10, 10, 10]
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#4 - stopping leader heartbeat loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#4 - stopping handler loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - last heartbeat: 311, initiating new vote
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#0 - stopping follower heartbeat check loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#0 - starting vote timeout loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 30, candidate_term: 31, become follower
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 28, candidate_term: 31, become follower
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 31, candidate_term: 31, candidate_id: 0, last_log_idx: 8, last_log_term: 28, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 31, candidate_term: 31, candidate_id: 0, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - received vote reject, my.term: 31, resp.term: 31
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - received vote approve, current: 2
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 31, candidate_term: 32, become follower
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 31, candidate_term: 32, become follower
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 32, candidate_term: 32, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 8, arg.last_log_term: 28, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 32, candidate_term: 32, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 8, arg.last_log_term: 28, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#0 - starting follower heartbeat check loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=32
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#4 - stopping vote timeout loop
+[2022-05-22T10:31:51Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 0, resp: Rpc(Timeout)
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 32, index: 9, entry: Entry { x: 8108241860298977942 }
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:51Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 32, next_index: [9, 9, 9, 9, 9]
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:51Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 32, candidate_term: 33, become follower
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 32, candidate_term: 33, become follower
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 33, candidate_term: 33, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 9, arg.last_log_term: 32, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 33, candidate_term: 33, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 9, arg.last_log_term: 32, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=33
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 33, index: 10, entry: Entry { x: 3565318826746224749 }
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#2 - starting handler loop
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#2 - starting follower heartbeat check loop
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#0 - stopping vote timeout loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 33, next_index: [10, 10, 10, 10, 10]
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#0 - last heartbeat: 338, initiating new vote
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#0 - stopping follower heartbeat check loop
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#0 - starting vote timeout loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 33, candidate_term: 34, become follower
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 16, candidate_term: 34, become follower
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 34, candidate_term: 34, candidate_id: 0, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - request_vote, my term: 34, candidate_term: 34, candidate_id: 0, last_log_idx: 4, last_log_term: 16, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#0 - received vote approve, current: 2
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#0 - received vote reject, my.term: 34, resp.term: 34
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:52Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 2, resp: Rpc(Timeout)
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#2 - stopping follower heartbeat check loop
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#2 - starting vote timeout loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 34, candidate_term: 35, become follower
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 34, candidate_term: 35, become follower
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 35, candidate_term: 35, candidate_id: 2, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 4, arg.last_log_term: 16, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#0 - starting follower heartbeat check loop
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 35, candidate_term: 35, candidate_id: 2, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 4, arg.last_log_term: 16, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - received vote approve, current: 2
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - received vote approve, current: 3
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - received quorum approves, i am leader, term=35
+[2022-05-22T10:31:52Z INFO  raft::raft] peer#2 - starting leader heartbeat loop
+[2022-05-22T10:31:52Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 4, resp: Rpc(Timeout)
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - append_log, term: 35, index: 5, entry: Entry { x: 8385344532604549701 }
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - tick append_entries, term: 35, next_index: [5, 5, 5, 5, 5]
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 11, index: 4 }, arg_prev_term: 16, arg_prev_idx: 4, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 11, index: 4 }, arg_prev_term: 16, arg_prev_idx: 4, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - append_entries response conflict, peer:1, conflict_idx: 4, conflict_term: 11, log: [(1, 1), (2, 1), (3, 7), (4, 16), (5, 35)]
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - SET NEXT_INDEX FOR PEER[1] = 4
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - append_entries response conflict, peer:0, conflict_idx: 4, conflict_term: 11, log: [(1, 1), (2, 1), (3, 7), (4, 16), (5, 35)]
+[2022-05-22T10:31:52Z INFO  raft::raft::raft_core] peer#2 - SET NEXT_INDEX FOR PEER[0] = 4
+[2022-05-22T10:31:52Z WARN  raft::raft::raft_core] peer#4 - append_entries error, peer: 2, resp: Rpc(Timeout)
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - tick append_entries, term: 35, next_index: [4, 4, 5, 5, 5]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 3, index: 3 }, arg_prev_term: 7, arg_prev_idx: 3, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 3, index: 3 }, arg_prev_term: 7, arg_prev_idx: 3, logs: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14)]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - append_entries response conflict, peer:0, conflict_idx: 3, conflict_term: 3, log: [(1, 1), (2, 1), (3, 7), (4, 16), (5, 35)]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - SET NEXT_INDEX FOR PEER[0] = 3
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - append_entries response conflict, peer:1, conflict_idx: 3, conflict_term: 3, log: [(1, 1), (2, 1), (3, 7), (4, 16), (5, 35)]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - SET NEXT_INDEX FOR PEER[1] = 3
+[2022-05-22T10:31:53Z WARN  raft::raft::raft_core] peer#3 - append_entries error, peer: 2, resp: Rpc(Timeout)
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#0 - stopping vote timeout loop
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - tick append_entries, term: 35, next_index: [3, 3, 5, 5, 5]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#0 - replicate log entries: [3, 4, 5]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#1 - replicate log entries: [3, 4, 5]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - SET NEXT_INDEX FOR PEER[0] = 6
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - SET NEXT_INDEX FOR PEER[1] = 6
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_commit to index 1
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_states: [1]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_commit to index 2
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_states: [2]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_commit to index 3
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_states: [3]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_commit to index 4
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_states: [4]
+thread '<unnamed>' panicked at 'commit index=3 server=2 Entry { x: 17457113500381700015 } != server=3 Entry { x: 5531883957852247843 }', raft/src/raft/config.rs:415:29
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_commit to index 5
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - apply_states: [5]
+stack backtrace:
+   0: rust_begin_unwind
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/std/src/panicking.rs:584:5
+   1: core::panicking::panic_fmt
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/core/src/panicking.rs:142:14
+   2: raft::raft::config::Config::start1_ext::{{closure}}
+             at ./src/raft/config.rs:415:29
+   3: <futures_util::stream::stream::for_each::ForEach<St,Fut,F> as core::future::future::Future>::poll
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-util-0.3.4/src/stream/stream/for_each.rs:79:34
+   4: <futures_task::future_obj::LocalFutureObj<T> as core::future::future::Future>::poll
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-task-0.3.4/src/future_obj.rs:86:13
+   5: <futures_task::future_obj::FutureObj<T> as core::future::future::Future>::poll
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-task-0.3.4/src/future_obj.rs:133:9
+   6: futures_util::future::future::FutureExt::poll_unpin
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-util-0.3.4/src/future/future/mod.rs:507:9
+   7: futures_executor::thread_pool::Task::run
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-executor-0.3.4/src/thread_pool.rs:324:27
+   8: futures_executor::thread_pool::PoolState::work
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-executor-0.3.4/src/thread_pool.rs:158:39
+   9: futures_executor::thread_pool::ThreadPoolBuilder::create::{{closure}}
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-executor-0.3.4/src/thread_pool.rs:286:42
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#2 - stopping vote timeout loop
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#2 - tick append_entries, term: 35, next_index: [6, 6, 5, 5, 5]
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#2 - stopping leader heartbeat loop
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#2 - stopping handler loop
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 310, initiating new vote
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 35, candidate_term: 36, become follower
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 36, candidate_term: 36, candidate_id: 1, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 33, candidate_term: 36, become follower
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#1 - received vote approve, current: 2
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - request_vote, my term: 36, candidate_term: 36, candidate_id: 1, last_log_idx: 10, last_log_term: 33, arg.last_log_idx: 6, arg.last_log_term: 14, matches_term: true, already_voted: false, not_expired_log: false ==  reject
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#1 - received vote reject, my.term: 36, resp.term: 36
+[2022-05-22T10:31:53Z WARN  raft::raft::raft_core] peer#2 - append_entries error, peer: 3, resp: Rpc(Timeout)
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 36, candidate_term: 37, become follower
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#0 - request_vote, my term: 37, candidate_term: 37, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 10, arg.last_log_term: 33, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 36, candidate_term: 37, become follower
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 2
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#1 - request_vote, my term: 37, candidate_term: 37, candidate_id: 3, last_log_idx: 6, last_log_term: 14, arg.last_log_idx: 10, arg.last_log_term: 33, matches_term: true, already_voted: false, not_expired_log: true ==  approve
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#1 - starting follower heartbeat check loop
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - received vote approve, current: 3
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - received quorum approves, i am leader, term=37
+[2022-05-22T10:31:53Z INFO  raft::raft] peer#3 - starting leader heartbeat loop
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 37, next_index: [11, 11, 11, 11, 11]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#0 - append_entries conflict: ConflictEntry { term: 0, index: 7 }, arg_prev_term: 33, arg_prev_idx: 10, logs: [(1, 1), (2, 1), (3, 7), (4, 16), (5, 35), (6, 14)]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#1 - append_entries conflict: ConflictEntry { term: 0, index: 7 }, arg_prev_term: 33, arg_prev_idx: 10, logs: [(1, 1), (2, 1), (3, 7), (4, 16), (5, 35), (6, 14)]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - append_entries response conflict, peer:0, conflict_idx: 7, conflict_term: 0, log: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14), (7, 21), (8, 28), (9, 32), (10, 33)]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[0] = 7
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - append_entries response conflict, peer:1, conflict_idx: 7, conflict_term: 0, log: [(1, 1), (2, 1), (3, 3), (4, 11), (5, 13), (6, 14), (7, 21), (8, 28), (9, 32), (10, 33)]
+[2022-05-22T10:31:53Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[1] = 7
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 37, next_index: [7, 7, 11, 11, 11]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#0 - replicate log entries: [7, 8, 9, 10]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#1 - replicate log entries: [7, 8, 9, 10]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[0] = 11
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - SET NEXT_INDEX FOR PEER[1] = 11
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 1
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [1]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 2
+thread '<unnamed>' panicked at 'called `Result::unwrap()` on an `Err` value: PoisonError { .. }', raft/src/raft/config.rs:410:44
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [2]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 3
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [3]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 4
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [4]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 5
+stack backtrace:
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [5]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 6
+   0: [2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [6]
+rust_begin_unwind[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 7
+
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/std/src/panicking.rs[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [7]
+:584:5
+   1: core::panicking::panic_fmt[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 8
+
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/core/src/panicking.rs:142:14
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [8]
+   2: core::result::unwrap_failed
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/core/src/result.rs:[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 9
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [9]
+1785[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_commit to index 10
+:5
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - apply_states: [10]
+   3: core::result::Result<T,E>::unwrap
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/core/src/result.rs:1078:23
+   4: raft::raft::config::Config::start1_ext::{{closure}}
+             at ./src/raft/config.rs:410:29
+   5: <futures_util::stream::stream::for_each::ForEach<St,Fut,F> as core::future::future::Future>::poll
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-util-0.3.4/src/stream/stream/for_each.rs:79:34
+   6: <futures_task::future_obj::LocalFutureObj<T> as core::future::future::Future>::poll
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-task-0.3.4/src/future_obj.rs:86:13
+   7: <futures_task::future_obj::FutureObj<T> as core::future::future::Future>::poll
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-task-0.3.4/src/future_obj.rs:133:9
+   8: futures_util::future::future::FutureExt::poll_unpin
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-util-0.3.4/src/future/future/mod.rs:507:9
+   9: futures_executor::thread_pool::Task::run
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-executor-0.3.4/src/thread_pool.rs:324:27
+  10: futures_executor::thread_pool::PoolState::work
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-executor-0.3.4/src/thread_pool.rs:158:39
+  11: futures_executor::thread_pool::ThreadPoolBuilder::create::{{closure}}
+             at /Users/a.koshchiy/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-executor-0.3.4/src/thread_pool.rs:286:42
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#1 - stopping vote timeout loop
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 37, next_index: [11, 11, 11, 11, 11]
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - append_log, term: 37, index: 11, entry: Entry { x: 10576104423189981383 }
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#3 - stopping vote timeout loop
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#3 - tick append_entries, term: 37, next_index: [11, 11, 11, 11, 11]
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#3 - stopping leader heartbeat loop
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#3 - stopping handler loop
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#0 - last heartbeat: 428, initiating new vote
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#0 - stopping follower heartbeat check loop
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#0 - starting vote timeout loop
+[2022-05-22T10:31:54Z INFO  raft::raft::raft_core] peer#1 - last heartbeat: 531, initiating new vote
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#1 - stopping follower heartbeat check loop
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#1 - starting vote timeout loop
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#4 - starting handler loop
+[2022-05-22T10:31:54Z INFO  raft::raft] peer#4 - starting follower heartbeat check loop
+[2022-05-22T10:31:55Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:55Z INFO  raft::raft::raft_core] peer#4 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:31:55Z INFO  raft::raft] peer#4 - stopping follower heartbeat check loop
+[2022-05-22T10:31:55Z INFO  raft::raft] peer#4 - starting vote timeout loop
+[2022-05-22T10:31:55Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:55Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:31:55Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:55Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:56Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:56Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:31:56Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:56Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:56Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:31:56Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:57Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:57Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:57Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:31:58Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:58Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:58Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:31:58Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:58Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:58Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:31:59Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:31:59Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:59Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:31:59Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:31:59Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:00Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:00Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:00Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:00Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:00Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:01Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:01Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:01Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:01Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:01Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:02Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:02Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:02Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:02Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:02Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:03Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:03Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:03Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:03Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:04Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:04Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:04Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:04Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:04Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:04Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:05Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:05Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:05Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:05Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:05Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:05Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:06Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:06Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:06Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:07Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:07Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:07Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:07Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:07Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:07Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:08Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:08Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:08Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:08Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:08Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:09Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:09Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:09Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:09Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:09Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:10Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:10Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:10Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:10Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:10Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:10Z INFO  raft::raft] peer#2 - starting handler loop
+[2022-05-22T10:32:10Z INFO  raft::raft] peer#2 - starting follower heartbeat check loop
+[2022-05-22T10:32:10Z INFO  raft::raft] peer#3 - starting handler loop
+[2022-05-22T10:32:10Z INFO  raft::raft] peer#3 - starting follower heartbeat check loop
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#3 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:32:11Z INFO  raft::raft] peer#3 - stopping follower heartbeat check loop
+[2022-05-22T10:32:11Z INFO  raft::raft] peer#3 - starting vote timeout loop
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#2 - last heartbeat: 0, initiating new vote
+[2022-05-22T10:32:11Z INFO  raft::raft] peer#2 - stopping follower heartbeat check loop
+[2022-05-22T10:32:11Z INFO  raft::raft] peer#2 - starting vote timeout loop
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:11Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:12Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:12Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:12Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:12Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:12Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:12Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:13Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:14Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:14Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:14Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:14Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:14Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:14Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:14Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:14Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:15Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:15Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:15Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:15Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:15Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:15Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:15Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:16Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:17Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:17Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:17Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:17Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:17Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:17Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:17Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:18Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:18Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:18Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:18Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:18Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:18Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:18Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:18Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:19Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:20Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+[2022-05-22T10:32:20Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:20Z INFO  raft::raft::raft_core] peer#0 - vote election timeout, initiating new vote
+[2022-05-22T10:32:20Z INFO  raft::raft::raft_core] peer#1 - vote election timeout, initiating new vote
+[2022-05-22T10:32:20Z INFO  raft::raft::raft_core] peer#2 - vote election timeout, initiating new vote
+[2022-05-22T10:32:20Z INFO  raft::raft::raft_core] peer#4 - vote election timeout, initiating new vote
+[2022-05-22T10:32:20Z INFO  raft::raft::raft_core] peer#3 - vote election timeout, initiating new vote
+thread 'main' panicked at 'one(Entry { x: 16038540729820809788 }) failed to reach agreement', raft/src/raft/config.rs:329:9
+stack backtrace:
+   0: rust_begin_unwind
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/std/src/panicking.rs:584:5
+   1: core::panicking::panic_fmt
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/core/src/panicking.rs:142:14
+   2: raft::raft::config::Config::one
+             at ./src/raft/config.rs:329:9
+   3: raft::raft::tests::test_figurre_8_2c
+             at ./src/raft/tests.rs:782:5
+   4: raft::raft::tests::test_figurre_8_2c::{{closure}}
+             at ./src/raft/tests.rs:731:1
+   5: core::ops::function::FnOnce::call_once
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/core/src/ops/function.rs:248:5
+   6: core::ops::function::FnOnce::call_once
+             at /rustc/18f314e7027fe7084aaab8620c624a0d7bd29e70/library/core/src/ops/function.rs:248:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+FAILED
+
+failures:
+
+failures:
+    raft::tests::test_figurre_8_2c
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 40.98s
+
+error: test failed, to rerun pass '-p raft --lib'
+make: *** [cargo_test_figurre_8_2c] Error 101

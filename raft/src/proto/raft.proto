@@ -35,4 +35,6 @@ message EntryItem {
 message AppendEntriesReply {
   uint64 term = 1;
   bool success = 2;
+  uint64 conflicting_entry_term = 3;
+  uint64 conflicting_entry_idx = 4;
 }

@@ -18,10 +18,10 @@ mod tests;
 
 use self::errors::*;
 use self::persister::*;
-use self::raft_core::{PeerStatus, RequestVoteData, get_election_timeout};
+use self::raft_core::{get_election_timeout, PeerStatus, RequestVoteData, DebugState};
 use crate::proto::raftpb::*;
 use crate::raft::raft_core::{
-    get_heartbeat_delay, get_heartbeat_timeout, AppendEntriesData, AppendEntriesPeerReply,
+    get_heartbeat_delay, AppendEntriesData, AppendEntriesPeerReply,
     RaftCore, RaftCoreEvent,
 };
 
@@ -95,20 +95,19 @@ impl Raft {
         // let peer = &peers[me];
         let (sender, mut receiver) = unbounded::<RaftCoreEvent>();
         let stop = Arc::new(AtomicBool::new(false));
-        let pool = Arc::new(
-            ThreadPoolBuilder::new().create().unwrap()
-        );
+        let pool = Arc::new(ThreadPoolBuilder::new().create().unwrap());
 
         let raft_core = Arc::new(RaftCore::new(me, peers.len(), persister, sender));
         let stop_clone = stop.clone();
         let pool_clone = pool.clone();
 
         let event_handler = Arc::new(RaftEventHandler::new(
+            me,
             peers.clone(),
             raft_core.clone(),
             apply_ch,
             stop_clone,
-            pool_clone
+            pool_clone,
         ));
 
         // let raft_core_clone = raft_core.clone();
@@ -135,10 +134,12 @@ impl Raft {
         let stop_clone = stop.clone();
 
         pool.spawn_ok(async move {
+            info!("peer#{} - starting handler loop", me);
             while !stop_clone.load(SeqCst) {
                 let msg = receiver.next().await.unwrap();
                 event_handler.handle(msg);
             }
+            info!("peer#{} - stopping handler loop", me);
         });
 
         raft_core.restore(&raft_state);
@@ -301,6 +302,7 @@ impl Raft {
 }
 
 struct RaftEventHandler {
+    me: usize,
     peers: Vec<RaftClient>,
     raft_core: Arc<RaftCore>,
     apply_ch: UnboundedSender<ApplyMsg>,
@@ -310,6 +312,7 @@ struct RaftEventHandler {
 
 impl RaftEventHandler {
     fn new(
+        me: usize,
         peers: Vec<RaftClient>,
         raft_core: Arc<RaftCore>,
         apply_ch: UnboundedSender<ApplyMsg>,
@@ -317,6 +320,7 @@ impl RaftEventHandler {
         pool: Arc<ThreadPool>,
     ) -> RaftEventHandler {
         RaftEventHandler {
+            me,
             peers,
             raft_core,
             apply_ch,
@@ -329,7 +333,10 @@ impl RaftEventHandler {
         match event {
             RaftCoreEvent::AppendEntries { data } => self.on_append_entries(data),
             RaftCoreEvent::CommitMessage { index, data } => self.on_commit_message(index, data),
-            RaftCoreEvent::BecomeCandidate { data } => self.on_become_candidate(data),
+            RaftCoreEvent::BecomeCandidate {
+                was_candidate,
+                data,
+            } => self.on_become_candidate(!was_candidate, data),
             RaftCoreEvent::BecomeFollower => self.on_become_follower(),
             RaftCoreEvent::BecomeLeader => self.on_become_leader(),
         }
@@ -338,12 +345,15 @@ impl RaftEventHandler {
     fn on_become_leader(&self) {
         let stop = self.stop.clone();
         let raft = self.raft_core.clone();
+        let me = self.me;
 
         self.pool.spawn_ok(async move {
+            info!("peer#{} - starting leader heartbeat loop", me);
             loop {
                 let stop = stop.load(SeqCst);
                 let is_leader = raft.get_peer_status() == PeerStatus::Leader;
                 if stop || !is_leader {
+                    info!("peer#{} - stopping leader heartbeat loop", me);
                     return;
                 }
                 Delay::new(get_heartbeat_delay()).await;
@@ -352,23 +362,32 @@ impl RaftEventHandler {
         });
     }
 
-    fn on_become_candidate(&self, data: RequestVoteData) {
+    fn on_become_candidate(&self, spawn_vote_checker: bool, data: RequestVoteData) {
+        if spawn_vote_checker {
+            self.spawn_vote_checker();
+        }
+        self.send_request_vote(data);
+    }
+
+    fn spawn_vote_checker(&self) {
         let stop = self.stop.clone();
         let raft = self.raft_core.clone();
+        let me = self.me;
 
         self.pool.spawn_ok(async move {
+            info!("peer#{} - starting vote timeout loop", me);
             loop {
                 let stop = stop.load(SeqCst);
                 let is_candidate = raft.get_peer_status() == PeerStatus::Candidate;
                 if stop || !is_candidate {
+                    info!("peer#{} - stopping vote timeout loop", me);
                     return;
                 }
                 Delay::new(get_election_timeout()).await;
                 raft.check_election_timeout();
             }
-        });
 
-        self.send_request_vote(data);
+        });
     }
 
     fn send_request_vote(&self, data: RequestVoteData) {
@@ -397,16 +416,21 @@ impl RaftEventHandler {
     fn on_become_follower(&self) {
         let stop = self.stop.clone();
         let raft = self.raft_core.clone();
+        let me = self.me;
 
         self.pool.spawn_ok(async move {
+            info!("peer#{} - starting follower heartbeat check loop", me);
             loop {
                 let stop = stop.load(SeqCst);
                 let is_follower = raft.get_peer_status() == PeerStatus::Follower;
                 if stop || !is_follower {
+                    info!("peer#{} - stopping follower heartbeat check loop", me);
                     return;
                 }
-                Delay::new(get_heartbeat_timeout()).await;
+
+                Delay::new(raft.get_heartbeat_timeout()).await;
                 raft.check_leader_heartbeat();
+
             }
         });
     }
@@ -428,12 +452,14 @@ impl RaftEventHandler {
                 .into_iter()
                 .map(|entry| EntryItem {
                     term: entry.term,
-                    index: entry.term,
+                    index: entry.index,
                     data: entry.data,
                 })
                 .collect();
 
             let entries_len = entries.len();
+
+            let term = data.term;
 
             let args = AppendEntriesArgs {
                 term: data.term,
@@ -450,6 +476,7 @@ impl RaftEventHandler {
                 .map_err(Error::Rpc)
                 .map(|r| AppendEntriesPeerReply {
                     reply: r,
+                    request_term: term,
                     entries_len,
                 });
 
@@ -568,6 +595,10 @@ impl Node {
         // Example:
         // self.raft.snapshot(index, snapshot)
         crate::your_code_here((index, snapshot));
+    }
+    
+    pub fn get_debug_state(&self) -> DebugState {
+        self.raft.raft_core.get_debug_state()
     }
 }
 

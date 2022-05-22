@@ -728,7 +728,7 @@ fn test_persist3_2c() {
 // The leader in a new term may try to finish replicating log entries that
 // haven't been committed yet.
 #[test]
-fn test_figure_8_2c() {
+fn test_figurre_8_2c() {
     let servers = 5;
     let mut cfg = Config::new(servers);
 
@@ -843,10 +843,28 @@ fn test_figure_8_unreliable_2c() {
         true,
     );
 
+    let rafts_clone = cfg.rafts.clone();
+    
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(100));
+            let rafts: Vec<_> = rafts_clone.lock().unwrap().iter().cloned().collect();
+            for raft in &rafts {
+                match raft {
+                    Some(rf) => {
+                        let state = rf.get_debug_state();
+                        info!("PEER#{} DEBUG STATE: {:?}", state.me, state);
+                    },
+                    None => continue,
+                }
+            }
+        }
+    });
+
     let mut nup = servers;
     for iters in 0..1000 {
         if iters == 200 {
-            cfg.net.set_long_reordering(true);
+            // cfg.net.set_long_reordering(true);
         }
         let mut leader = None;
         for i in 0..servers {
@@ -914,6 +932,25 @@ fn internal_churn(unreliable: bool) {
     }
 
     let stop = Arc::new(AtomicUsize::new(0));
+
+    // let stop_clone = stop.clone();
+    // let rafts_clone = cfg.rafts.clone();
+
+    // thread::spawn(move || {
+    //     loop {
+    //         thread::sleep(Duration::from_millis(100));
+    //         let rafts: Vec<_> = rafts_clone.lock().unwrap().iter().cloned().collect();
+    //         for raft in &rafts {
+    //             match raft {
+    //                 Some(rf) => {
+    //                     let state = rf.get_debug_state();
+    //                     info!("PEER#{} DEBUG STATE: {:?}", state.me, state);
+    //                 },
+    //                 None => continue,
+    //             }
+    //         }
+    //     }
+    // });
 
     // create concurrent clients
     // TODO: change it a future
@@ -991,20 +1028,24 @@ fn internal_churn(unreliable: bool) {
     for _iters in 0..20 {
         if (random.gen::<usize>() % 1000) < 200 {
             let i = random.gen::<usize>() % servers;
+            error!("disconnecting peer#{}", i);
             cfg.disconnect(i);
         }
 
         if (random.gen::<usize>() % 1000) < 500 {
             let i = random.gen::<usize>() % servers;
             if cfg.rafts.lock().unwrap().get(i).unwrap().is_none() {
+                error!("starting peer#{}", i);
                 cfg.start1(i);
             }
+            error!("connecting peer#{}", i);
             cfg.connect(i);
         }
 
         if (random.gen::<usize>() % 1000) < 200 {
             let i = random.gen::<usize>() % servers;
             if cfg.rafts.lock().unwrap().get(i).unwrap().is_some() {
+                error!("crashing peer#{}", i);
                 cfg.crash1(i);
             }
         }
@@ -1017,11 +1058,17 @@ fn internal_churn(unreliable: bool) {
     }
 
     thread::sleep(RAFT_ELECTION_TIMEOUT);
+
+
+    error!("=============== SECOND PHASE ==================");
+
     cfg.net.set_reliable(true);
     for i in 0..servers {
         if cfg.rafts.lock().unwrap().get(i).unwrap().is_none() {
+            error!("starting peer#{}", i);
             cfg.start1(i);
         }
+        error!("connecting peer#{}", i);
         cfg.connect(i);
     }
 
@@ -1057,7 +1104,7 @@ fn internal_churn(unreliable: bool) {
 }
 
 #[test]
-fn test_reliable_churn_2c() {
+fn test_rreliable_churn_2c() {
     internal_churn(false);
 }
 

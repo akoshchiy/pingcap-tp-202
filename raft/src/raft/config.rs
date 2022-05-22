@@ -424,7 +424,7 @@ impl Config {
                     panic!("server {} apply out of order {}, logs: {:?}", i, index, log);
                 }
 
-                info!("TEST log insert, peer#{}, index: {}, entry: {:?}", i, index, entry);
+                // info!("TEST log insert, peer#{}, index: {}, entry: {:?}", i, index, entry);
 
                 log.insert(index, entry);
 
