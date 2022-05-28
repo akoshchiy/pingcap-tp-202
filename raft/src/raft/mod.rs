@@ -341,35 +341,37 @@ impl RaftEventHandler {
         });
     }
 
-    fn on_become_candidate(&self, spawn_vote_checker: bool, data: RequestVoteData) {
-        if spawn_vote_checker {
-            self.spawn_vote_checker();
+    fn on_become_candidate(&self, spawn_timeout_loop: bool, data: RequestVoteData) {
+        if spawn_timeout_loop {
+            self.spawn_election_timeout_loop();
         }
         self.send_request_vote(data);
     }
 
-    fn spawn_vote_checker(&self) {
+    fn spawn_election_timeout_loop(&self) {
         let stop = self.stop.clone();
         let raft = self.raft_core.clone();
         let me = self.me;
 
         self.pool.spawn_ok(async move {
-            info!("peer#{} - starting vote timeout loop", me);
+            info!("peer#{} - starting election timeout loop", me);
             loop {
                 let stop = stop.load(SeqCst);
-                let is_candidate = raft.get_peer_status() == PeerStatus::Candidate;
-                if stop || !is_candidate {
-                    info!("peer#{} - stopping vote timeout loop", me);
+                let is_leader = raft.get_peer_status() == PeerStatus::Leader;
+                if stop || is_leader {
+                    info!("peer#{} - stopping election timeout loop", me);
                     return;
                 }
-                Delay::new(get_election_timeout()).await;
-                raft.check_election_timeout();
+                let timeout = get_election_timeout();
+                Delay::new(timeout).await;
+                raft.check_election_timeout(timeout);
             }
-
         });
     }
 
     fn send_request_vote(&self, data: RequestVoteData) {
+        let term = data.term;
+
         for i in 0..self.peers.len() {
             if i == data.me {
                 continue;
@@ -387,31 +389,13 @@ impl RaftEventHandler {
                     last_log_index: data.last_log_idx,
                 };
                 let result = peer_clone.request_vote(&args).await.map_err(Error::Rpc);
-                raft_clone.handle_request_vote_result(result);
+                raft_clone.handle_request_vote_result(term, result);
             });
         }
     }
 
     fn on_become_follower(&self) {
-        let stop = self.stop.clone();
-        let raft = self.raft_core.clone();
-        let me = self.me;
-
-        self.pool.spawn_ok(async move {
-            info!("peer#{} - starting follower heartbeat check loop", me);
-            loop {
-                let stop = stop.load(SeqCst);
-                let is_follower = raft.get_peer_status() == PeerStatus::Follower;
-                if stop || !is_follower {
-                    info!("peer#{} - stopping follower heartbeat check loop", me);
-                    return;
-                }
-
-                Delay::new(raft.get_heartbeat_timeout()).await;
-                raft.check_leader_heartbeat();
-
-            }
-        });
+        self.spawn_election_timeout_loop();
     }
 
     fn on_commit_message(&self, index: u64, data: Vec<u8>) {
@@ -433,6 +417,7 @@ impl RaftEventHandler {
                     term: entry.term,
                     string_data: entry.string_data,
                     data: entry.data,
+                    from_leader: entry.from_leader,
                 })
                 .collect();
 

@@ -30,6 +30,7 @@ message EntryItem {
   uint64 term = 1;
   bytes data = 2;
   string string_data = 3;
+  uint64 from_leader = 4;
 }
 
 message AppendEntriesReply {

@@ -12,8 +12,8 @@ use crate::raft::errors::*;
 use super::persister::Persister;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(150);
-pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(300);
-pub const ELECTION_TIMEOUT: Duration = Duration::from_millis(200);
+// pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(300);
+pub const ELECTION_TIMEOUT: Duration = Duration::from_millis(300);
 
 #[derive(Clone, Debug)]
 pub struct DebugState {
@@ -128,11 +128,7 @@ impl InnerRaft {
             event_ch,
         }
     }
-
-    fn is_leader(&self) -> bool {
-        self.status == PeerStatus::Leader
-    }
-
+    
     fn update_term(&mut self, term: u64) {
         if term != self.term {
             self.term = term;
@@ -194,7 +190,7 @@ impl InnerRaft {
             return;
         }
 
-        if !self.is_leader() || peer_reply.request_term != reply.term {
+        if peer_reply.request_term != self.term {
             info!("peer#{} - append_entries ignore, peer:{}, state: {:?}, req.term: {}, reply.term: {}, my.term: {}",
                 self.me, peer, self.status, peer_reply.request_term, reply.term, self.term);
             return;
@@ -213,6 +209,8 @@ impl InnerRaft {
             } else {
                 self.next_index[peer] = reply.conflicting_entry_idx;
             }
+
+            // self.next_index[peer] = 1;
 
             info!(
                 "peer#{} - append_entries response conflict, peer:{}, conflict_idx: {}, conflict_term: {}, set_index:{}, log: {}",
@@ -237,6 +235,12 @@ impl InnerRaft {
         );
 
         for i in self.commit_index + 1..=self.log.get_last_index() {
+            let entry_term = self.log.get_entry(i).map(|e| e.term).unwrap_or(0);
+
+            if entry_term != self.term {
+                continue;
+            }
+
             let mut match_count = 1;
 
             for peer_idx in 0..self.peers_count {
@@ -250,7 +254,7 @@ impl InnerRaft {
         }
     }
 
-    fn check_leader_heartbeat(&mut self) {
+    fn check_election_timeout(&mut self, timeout: Duration) {
         let now = SystemTime::now();
 
         if self.status == PeerStatus::Leader {
@@ -261,9 +265,7 @@ impl InnerRaft {
             .received_heartbeat_time
             .map(|t| now.duration_since(t).unwrap());
 
-        let expired = duration_since
-            .map(|d| d > HEARTBEAT_TIMEOUT)
-            .unwrap_or(true);
+        let expired = duration_since.map(|d| d > timeout).unwrap_or(true);
 
         if !expired {
             return;
@@ -272,29 +274,29 @@ impl InnerRaft {
         let dur_ms = duration_since.map(|d| d.as_millis()).unwrap_or(0);
 
         info!(
-            "peer#{} - last heartbeat: {}, initiating new vote",
+            "peer#{} - election timeout: {}, initiating new vote",
             self.me, dur_ms
         );
 
         self.become_candidate();
     }
 
-    fn check_election_timeout(&mut self) {
-        if self.status != PeerStatus::Candidate || self.vote_progress.is_none() {
-            return;
-        }
+    // fn check_election_timeout(&mut self, timeout: Duration) {
+    //     // if self.status != PeerStatus::Candidate || self.vote_progress.is_none() {
+    //     //     return;
+    //     // }
 
-        let started_at = self.vote_progress.as_mut().unwrap().started_at;
-        let duration_since = SystemTime::now().duration_since(started_at).unwrap();
+    //     let started_at = self.vote_progress.as_mut().unwrap().started_at;
+    //     let duration_since = SystemTime::now().duration_since(started_at).unwrap();
 
-        if duration_since > ELECTION_TIMEOUT {
-            info!(
-                "peer#{} - vote election timeout, initiating new vote",
-                self.me
-            );
-            self.become_candidate();
-        }
-    }
+    //     if duration_since > ELECTION_TIMEOUT {
+    //         info!(
+    //             "peer#{} - vote election timeout, initiating new vote",
+    //             self.me
+    //         );
+    //         self.become_candidate();
+    //     }
+    // }
 
     fn handle_request_vote_request(&mut self, args: RequestVoteArgs) -> RequestVoteReply {
         if args.term > self.term {
@@ -371,7 +373,7 @@ impl InnerRaft {
 
         if ok {
             succeed = true;
-            
+
             self.replicate_log_entries(&args);
 
             let current_commit_idx = self.commit_index;
@@ -402,17 +404,41 @@ impl InnerRaft {
     }
 
     fn replicate_log_entries(&mut self, args: &AppendEntriesArgs) {
-        let log_insert_idx = args.prev_log_idx + 1;
+        let mut log_insert_idx = args.prev_log_idx + 1;
+        let mut from_args_idx = 0;
 
-        self.log.truncate(args.prev_log_idx);
+        let mut conflict_or_missing = false;
 
-        let entries: Vec<LogEntry> = args
-            .entries
+        for i in 0..args.entries.len() {
+            let log_idx = args.prev_log_idx + 1 + i as u64;
+
+            let arg_entry = &args.entries[i];
+            let log_entry = self.log.get_entry(log_idx);
+
+            conflict_or_missing = log_entry.map(|e| e.term != arg_entry.term).unwrap_or(true);
+
+            if conflict_or_missing {
+                break;
+            }
+
+            log_insert_idx += 1;
+            from_args_idx += 1;
+        }
+
+        // nothing to replicate,
+        if !conflict_or_missing {
+            return;
+        }
+
+        self.log.truncate(log_insert_idx - 1);
+
+        let entries: Vec<LogEntry> = args.entries[from_args_idx..]
             .iter()
             .map(|e| LogEntry {
                 data: e.data.clone(),
                 string_data: e.string_data.clone(),
                 term: e.term,
+                from_leader: e.from_leader,
             })
             .collect();
 
@@ -425,10 +451,11 @@ impl InnerRaft {
         self.log.push_range(range);
     }
 
-    fn handle_request_vote_reply(&mut self, reply: RequestVoteReply) {
-        if self.status != PeerStatus::Candidate {
+    fn handle_request_vote_reply(&mut self, request_term: u64, reply: RequestVoteReply) {
+        if self.status != PeerStatus::Candidate || request_term != self.term {
             return;
         }
+
         let progress = self.vote_progress.as_mut().unwrap();
         if !reply.vote_granted {
             info!(
@@ -456,6 +483,8 @@ impl InnerRaft {
     }
 
     fn become_leader(&mut self) {
+        info!("peer#{}[{}] - become leader", self.me, self.term);
+
         self.status = PeerStatus::Leader;
 
         let last_index = self.log.get_last_index();
@@ -473,6 +502,7 @@ impl InnerRaft {
         if self.status == PeerStatus::Follower {
             return;
         }
+        info!("peer#{}[{}] - become follower", self.me, self.term);
         self.status = PeerStatus::Follower;
         self.voted_for = Option::None;
         self.vote_progress = Option::None;
@@ -481,6 +511,11 @@ impl InnerRaft {
 
     fn become_candidate(&mut self) {
         let was_candidate = self.status == PeerStatus::Candidate;
+
+        info!(
+            "peer#{}[{}] - become candidate, was_candidate: {}",
+            self.me, self.term, was_candidate
+        );
 
         self.status = PeerStatus::Candidate;
         self.term += 1;
@@ -492,6 +527,8 @@ impl InnerRaft {
 
         let last_log_idx = self.log.get_last_index();
         let last_log_term = self.log.get_last_entry().map(|e| e.term).unwrap_or(0);
+
+        self.reset_heartbeat_timeout();
 
         self.persist();
 
@@ -528,6 +565,7 @@ impl InnerRaft {
             term: self.term,
             data,
             string_data: format!("{:?}", msg),
+            from_leader: self.me as u64,
         };
         self.log.append(entry);
         let index = self.log.len();
@@ -591,7 +629,14 @@ impl InnerRaft {
             self.last_applied = idx;
         }
 
-        info!("peer#{} - apply_states: {:?}", self.me, states_to_apply);
+        if !states_to_apply.is_empty() {
+            info!(
+                "peer#{} - apply_states: [{}..{}]",
+                self.me,
+                states_to_apply[0],
+                states_to_apply[states_to_apply.len() - 1]
+            );
+        }
     }
 
     fn send_event(&self, event: RaftCoreEvent) {
@@ -622,10 +667,10 @@ impl RaftCore {
         inner.handle_request_vote_request(args)
     }
 
-    pub fn handle_request_vote_result(&self, result: Result<RequestVoteReply>) {
+    pub fn handle_request_vote_result(&self, request_term: u64, result: Result<RequestVoteReply>) {
         let mut inner = self.inner.lock().unwrap();
         match result {
-            Ok(reply) => inner.handle_request_vote_reply(reply),
+            Ok(reply) => inner.handle_request_vote_reply(request_term, reply),
             Err(err) => inner.handle_request_vote_error(err),
         }
     }
@@ -670,14 +715,14 @@ impl RaftCore {
         inner.tick_append_entries()
     }
 
-    pub fn check_leader_heartbeat(&self) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.check_leader_heartbeat()
-    }
+    // pub fn check_leader_heartbeat(&self) {
+    //     let mut inner = self.inner.lock().unwrap();
+    //     inner.check_leader_heartbeat()
+    // }
 
-    pub fn check_election_timeout(&self) {
+    pub fn check_election_timeout(&self, timeout: Duration) {
         let mut inner = self.inner.lock().unwrap();
-        inner.check_election_timeout();
+        inner.check_election_timeout(timeout);
     }
 
     pub fn append_log<M>(&self, command: &M) -> Result<(u64, u64)>
@@ -718,10 +763,6 @@ impl RaftCore {
             commit_idx: inner.commit_index,
         }
     }
-
-    pub fn get_heartbeat_timeout(&self) -> Duration {
-        randomize_duration(HEARTBEAT_TIMEOUT)
-    }
 }
 
 pub struct AppendEntriesPeerReply {
@@ -731,7 +772,6 @@ pub struct AppendEntriesPeerReply {
 }
 
 struct VoteProgress {
-    started_at: SystemTime,
     failed_count: usize,
     succeed_count: usize,
 }
@@ -739,7 +779,6 @@ struct VoteProgress {
 impl VoteProgress {
     fn new() -> VoteProgress {
         VoteProgress {
-            started_at: SystemTime::now(),
             failed_count: 0,
             succeed_count: 0,
         }
@@ -785,6 +824,8 @@ pub struct LogEntry {
     pub term: u64,
     #[prost(string, tag = "3")]
     pub string_data: String,
+    #[prost(uint64, tag = "4")]
+    pub from_leader: u64,
 }
 
 struct LogContainer {
@@ -806,7 +847,7 @@ impl Display for LogContainer {
         //     }
         // }
         // f.write_str("]")
-        write!(f, "[]")?;
+        write!(f, "[1..{}]", self.len())?;
         Ok(())
     }
 }
@@ -895,11 +936,12 @@ impl LogContainer {
         let missing_entries = args.prev_log_idx > self.len();
 
         if missing_entries {
+            let len = self.len();
             return (
                 false,
                 Option::Some(ConflictEntry {
                     term: 0,
-                    index: self.get_last_index() + 1,
+                    index: if len > 0 { len } else { 1 },
                 }),
             );
         }
@@ -910,7 +952,10 @@ impl LogContainer {
             let conflict_term = prev_entry.term;
             let mut conflict_idx = args.prev_log_idx;
             loop {
-                let entry = self.get_entry(conflict_idx);
+                if conflict_idx == 0 {
+                    break;
+                }
+                let entry = self.get_entry(conflict_idx - 1);
                 if entry.is_none() {
                     break;
                 }
@@ -923,7 +968,7 @@ impl LogContainer {
                 false,
                 Option::Some(ConflictEntry {
                     term: conflict_term,
-                    index: conflict_idx + 1,
+                    index: conflict_idx,
                 }),
             );
         }
@@ -953,7 +998,12 @@ impl Display for LogEntryRange {
         // f.write_str("]")?;
         // let first = self.entries[0]
         // write!(f, "[[idx={},term={}]..[idx={},term={}]]",)
-        write!(f, "[]")?;
+        write!(
+            f,
+            "[{}..{}]",
+            self.start_index,
+            self.start_index + self.entries.len() as u64
+        )?;
         Ok(())
     }
 }
