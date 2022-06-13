@@ -1,14 +1,54 @@
-use futures::channel::mpsc::unbounded;
+use std::collections::HashMap;
+use std::future::{self, Future};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::SeqCst;
 
+use futures::StreamExt;
+use futures::channel::mpsc::{unbounded, UnboundedReceiver};
+use futures::channel::oneshot;
+
+use crate::kvraft::errors;
 use crate::proto::kvraftpb::*;
-use crate::raft;
+use crate::raft::errors::{Result, Error};
+use crate::raft::{self, ApplyMsg};
+use crate::raft::errors::Error::NotLeader;
+
+#[derive(Clone, PartialEq, Message)]
+struct LogEntry {
+    #[prost(string, tag = "1")]
+    key: String,
+    #[prost(string, optional, tag = "2")]
+    value: Option<String>,
+    #[prost(enumeration = "EntryType", tag = "3")]
+    entry_type: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Enumeration)]
+enum EntryType {
+    Get = 0,
+    Put = 1,
+    Append = 2,
+}
 
 pub struct KvServer {
     pub rf: raft::Node,
     me: usize,
     // snapshot if log grows this big
     maxraftstate: Option<usize>,
+    apply_ch: UnboundedReceiver<ApplyMsg>,
     // Your definitions here.
+    state: Mutex<KvServerState>,
+}
+
+struct KvServerState {
+    index: HashMap<String, String>,
+    requests: HashMap<u64, RequestState>,
+}
+
+struct RequestState {
+    entry: LogEntry,
+    callback: Box<dyn Fn(&LogEntry, &LogEntry)>,
 }
 
 impl KvServer {
@@ -23,7 +63,79 @@ impl KvServer {
         let (tx, apply_ch) = unbounded();
         let rf = raft::Raft::new(servers, me, persister, tx);
 
-        crate::your_code_here((rf, maxraftstate, apply_ch))
+        let rf_node = raft::Node::new(rf);
+
+
+
+        KvServer {
+            rf: rf_node,
+            me,
+            maxraftstate,
+            apply_ch,
+        }
+    }
+
+    fn state(&self) -> MutexGuard<KvServerState> {
+        self.state.lock().unwrap()
+    }
+
+    fn handle_apply_msg(&self, idx: u64, data: Vec<u8>) -> Result<()> {
+        let entry = decode_data(&data)?;
+
+        let mut state = self.state();
+
+        let request = state.requests.remove(&idx);
+        match request {
+            Some(state) => {
+                state.callback(&entry, &state.entry);
+            },
+            None => {},
+        }
+
+
+
+
+
+        Ok(())
+    }
+
+    async fn get(&self, arg: GetRequest) -> GetReply {
+        unimplemented!()
+    }
+
+    async fn put_append(&self, arg: PutAppendRequest) -> PutAppendReply {
+        let entry = match arg.op() {
+            Op::Put => LogEntry {
+                key: arg.key,
+                value: Some(arg.value),
+                entry_type: 1,
+            },
+            Op::Append => LogEntry {
+                key: arg.key,
+                value: Some(arg.value),
+                entry_type: 2,
+            },
+            Op::Unknown => {
+                return PutAppendReply {
+                    wrong_leader: false,
+                    err: "undefined Op".to_owned(),
+                }
+            }
+        };
+
+        match self.rf.start(&entry) {
+            Ok((idx, term)) => self.wait_apply(idx, term, &entry).await,
+            Err(err) => match err {
+                NotLeader => PutAppendReply {
+                    wrong_leader: true,
+                    err: "".to_owned(),
+                },
+                _ => PutAppendReply {
+                    wrong_leader: false,
+                    err: err.to_string(),
+                },
+            },
+        }
     }
 }
 
@@ -35,6 +147,26 @@ impl KvServer {
         let _ = &self.maxraftstate;
     }
 }
+
+fn decode_data(data: &[u8]) -> Result<LogEntry> {
+    labcodec::decode(data)
+        .map_err(|err| Error::Decode(err))        
+}
+
+fn read_apply_ch(server: Arc<KvServer>, apply_ch: UnboundedReceiver<ApplyMsg>) -> impl Future {
+    apply_ch.for_each(|msg| match msg {
+        ApplyMsg::Command { data, index } => {
+            
+
+
+            future::ready(())
+        },
+        _ => {
+            future::ready(())
+        },
+    })
+}
+
 
 // Choose concurrency paradigm.
 //
@@ -53,6 +185,7 @@ impl KvServer {
 #[derive(Clone)]
 pub struct Node {
     // Your definitions here.
+    server: Arc<KvServer>,
 }
 
 impl Node {
@@ -85,11 +218,7 @@ impl Node {
     }
 
     pub fn get_state(&self) -> raft::State {
-        // Your code here.
-        // raft::State {
-        //     ..Default::default()
-        // }
-        unimplemented!()
+        self.server.rf.get_state()
     }
 }
 
