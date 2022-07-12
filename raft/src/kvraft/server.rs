@@ -1,18 +1,16 @@
 use std::collections::HashMap;
 use std::future::{self, Future};
+use std::hash::Hash;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering::SeqCst;
 
-use futures::StreamExt;
 use futures::channel::mpsc::{unbounded, UnboundedReceiver};
 use futures::channel::oneshot;
+use futures::executor::ThreadPoolBuilder;
+use futures::StreamExt;
 
-use crate::kvraft::errors;
 use crate::proto::kvraftpb::*;
-use crate::raft::errors::{Result, Error};
-use crate::raft::{self, ApplyMsg};
 use crate::raft::errors::Error::NotLeader;
+use crate::raft::{self, ApplyMsg};
 
 #[derive(Clone, PartialEq, Message)]
 struct LogEntry {
@@ -22,6 +20,10 @@ struct LogEntry {
     value: Option<String>,
     #[prost(enumeration = "EntryType", tag = "3")]
     entry_type: i32,
+    #[prost(string, tag = "4")]
+    client_id: String,
+    #[prost(uint64, tag = "5")]
+    client_op_seq: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Enumeration)]
@@ -36,19 +38,20 @@ pub struct KvServer {
     me: usize,
     // snapshot if log grows this big
     maxraftstate: Option<usize>,
-    apply_ch: UnboundedReceiver<ApplyMsg>,
+    // apply_ch: UnboundedReceiver<ApplyMsg>,
     // Your definitions here.
-    state: Mutex<KvServerState>,
+    state: Arc<Mutex<KvServerState>>,
 }
 
 struct KvServerState {
     index: HashMap<String, String>,
-    requests: HashMap<u64, RequestState>,
+    request_channels: HashMap<u64, oneshot::Sender<LogEntry>>,
 }
 
-struct RequestState {
-    entry: LogEntry,
-    callback: Box<dyn Fn(&LogEntry, &LogEntry)>,
+impl KvServerState {
+    fn add_request_ch(&mut self, idx: u64, ch: oneshot::Sender<LogEntry>) {
+        self.request_channels.insert(idx, ch);
+    }
 }
 
 impl KvServer {
@@ -64,43 +67,108 @@ impl KvServer {
         let rf = raft::Raft::new(servers, me, persister, tx);
 
         let rf_node = raft::Node::new(rf);
+        let pool = ThreadPoolBuilder::new().pool_size(1).create().unwrap();
 
-
-
-        KvServer {
+        let server = KvServer {
             rf: rf_node,
             me,
             maxraftstate,
-            apply_ch,
-        }
+            // apply_ch,
+            state: Arc::new(Mutex::new(KvServerState {
+                index: HashMap::new(),
+                request_channels: HashMap::new(),
+            })),
+        };
+
+        pool.spawn_ok(server.read_apply_ch(apply_ch));
+
+        server
     }
 
     fn state(&self) -> MutexGuard<KvServerState> {
         self.state.lock().unwrap()
     }
 
-    fn handle_apply_msg(&self, idx: u64, data: Vec<u8>) -> Result<()> {
-        let entry = decode_data(&data)?;
+    fn read_apply_ch(
+        &self,
+        apply_ch: UnboundedReceiver<ApplyMsg>,
+    ) -> impl Future<Output = ()> + Send + 'static {
+        let state = self.state.clone();
 
-        let mut state = self.state();
+        apply_ch.for_each(move |msg| match msg {
+            ApplyMsg::Command { data, index } => {
+                let entry = decode_data(&data);
 
-        let request = state.requests.remove(&idx);
-        match request {
-            Some(state) => {
-                state.callback(&entry, &state.entry);
-            },
-            None => {},
-        }
+                let mut state = state.lock().unwrap();
 
+                
 
+                
 
 
 
-        Ok(())
+                state
+                    .request_channels
+                    .remove(&index)
+                    .map(|ch| ch.send(entry).unwrap());
+
+                future::ready(())
+            }
+            _ => future::ready(()),
+        })
     }
 
+    // fn handle_apply_msg(&self, idx: u64, data: Vec<u8>) -> Result<()> {
+    //     let entry = decode_data(&data)?;
+    //     let mut state = self.state();
+    //     let request = state.requests.remove(&idx);
+    //     match request {
+    //         Some(state) => {
+    //             state.callback(&entry, &state.entry);
+    //         }
+    //         None => {}
+    //     }
+    //     Ok(())
+    // }
+
     async fn get(&self, arg: GetRequest) -> GetReply {
-        unimplemented!()
+        let entry = LogEntry {
+            key: arg.key.clone(),
+            value: None,
+            entry_type: 0,
+            client_id: arg.client_id,
+            client_op_seq: arg.client_op_seq,
+        };
+
+        let result = self.append_entry(entry).await;
+
+        match result {
+            Ok(()) => {
+                let value = self
+                    .state()
+                    .index
+                    .get(&arg.key)
+                    .map(|v| v.clone())
+                    .unwrap_or("".to_owned());
+                GetReply {
+                    value,
+                    wrong_leader: false,
+                    err: "".to_owned(),
+                }
+            }
+            Err(err) => match err {
+                AppendEntryError::NotLeader => GetReply {
+                    wrong_leader: true,
+                    err: "".to_string(),
+                    value: "".to_string(),
+                },
+                AppendEntryError::Other(msg) => GetReply {
+                    wrong_leader: false,
+                    err: msg,
+                    value: "".to_string(),
+                },
+            },
+        }
     }
 
     async fn put_append(&self, arg: PutAppendRequest) -> PutAppendReply {
@@ -109,11 +177,15 @@ impl KvServer {
                 key: arg.key,
                 value: Some(arg.value),
                 entry_type: 1,
+                client_id: arg.client_id,
+                client_op_seq: arg.client_op_seq,
             },
             Op::Append => LogEntry {
                 key: arg.key,
                 value: Some(arg.value),
                 entry_type: 2,
+                client_id: arg.client_id,
+                client_op_seq: arg.client_op_seq,
             },
             Op::Unknown => {
                 return PutAppendReply {
@@ -123,21 +195,53 @@ impl KvServer {
             }
         };
 
-        match self.rf.start(&entry) {
-            Ok((idx, term)) => self.wait_apply(idx, term, &entry).await,
+        let result = self.append_entry(entry).await;
+
+        match result {
+            Ok(()) => PutAppendReply {
+                wrong_leader: false,
+                err: "".to_string(),
+            },
             Err(err) => match err {
-                NotLeader => PutAppendReply {
+                AppendEntryError::NotLeader => PutAppendReply {
                     wrong_leader: true,
                     err: "".to_owned(),
                 },
-                _ => PutAppendReply {
+                AppendEntryError::Other(msg) => PutAppendReply {
                     wrong_leader: false,
-                    err: err.to_string(),
+                    err: msg,
                 },
             },
         }
     }
+
+    async fn append_entry(&self, entry: LogEntry) -> AppendEntryResult {
+        let (idx, term) = self.rf.start(&entry).map_err(|err| match err {
+            NotLeader => AppendEntryError::NotLeader,
+            _ => AppendEntryError::Other(err.to_string()),
+        })?;
+
+        let mut state = self.state();
+
+        let (sender, recv) = oneshot::channel();
+        state.add_request_ch(idx, sender);
+        drop(state);
+
+        let recv_entry = recv.await.unwrap();
+        if entry != recv_entry {
+            return AppendEntryResult::Err(AppendEntryError::NotLeader);
+        }
+
+        AppendEntryResult::Ok(())
+    }
 }
+
+enum AppendEntryError {
+    NotLeader,
+    Other(String),
+}
+
+type AppendEntryResult = std::result::Result<(), AppendEntryError>;
 
 impl KvServer {
     /// Only for suppressing deadcode warnings.
@@ -148,25 +252,9 @@ impl KvServer {
     }
 }
 
-fn decode_data(data: &[u8]) -> Result<LogEntry> {
-    labcodec::decode(data)
-        .map_err(|err| Error::Decode(err))        
+fn decode_data(data: &[u8]) -> LogEntry {
+    labcodec::decode(data).unwrap()
 }
-
-fn read_apply_ch(server: Arc<KvServer>, apply_ch: UnboundedReceiver<ApplyMsg>) -> impl Future {
-    apply_ch.for_each(|msg| match msg {
-        ApplyMsg::Command { data, index } => {
-            
-
-
-            future::ready(())
-        },
-        _ => {
-            future::ready(())
-        },
-    })
-}
-
 
 // Choose concurrency paradigm.
 //
