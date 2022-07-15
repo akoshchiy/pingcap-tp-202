@@ -4,24 +4,25 @@ use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::Arc;
 
 use futures::channel::mpsc::{unbounded, UnboundedSender};
-use futures::executor::{ThreadPool, ThreadPoolBuilder};
+use futures::executor::ThreadPoolBuilder;
 use futures::StreamExt;
-use futures_timer::Delay;
 
 #[cfg(test)]
 pub mod config;
 pub mod errors;
 pub mod persister;
-mod raft_core;
+
+mod core;
+mod event_handler;
+
 #[cfg(test)]
 mod tests;
 
 use self::errors::*;
+use self::event_handler::RaftEventHandler;
 use self::persister::*;
-use self::raft_core::{get_election_timeout, PeerStatus, RequestVoteData, DebugState};
 use crate::proto::raftpb::*;
-use crate::raft::raft_core::{
-    get_heartbeat_delay, AppendEntriesData, AppendEntriesPeerReply,
+use crate::raft::core::{
     RaftCore, RaftCoreEvent,
 };
 
@@ -102,7 +103,6 @@ impl Raft {
         let pool_clone = pool.clone();
 
         let event_handler = Arc::new(RaftEventHandler::new(
-            me,
             peers.clone(),
             raft_core.clone(),
             apply_ch,
@@ -113,12 +113,12 @@ impl Raft {
         let stop_clone = stop.clone();
 
         pool.spawn_ok(async move {
-            info!("peer#{} - starting handler loop", me);
+            // info!("peer#{} - starting handler loop", me);
             while !stop_clone.load(SeqCst) {
                 let msg = receiver.next().await.unwrap();
                 event_handler.handle(msg);
             }
-            info!("peer#{} - stopping handler loop", me);
+            // info!("peer#{} - stopping handler loop", me);
         });
 
         raft_core.restore(&raft_state);
@@ -280,176 +280,6 @@ impl Raft {
     }
 }
 
-struct RaftEventHandler {
-    me: usize,
-    peers: Vec<RaftClient>,
-    raft_core: Arc<RaftCore>,
-    apply_ch: UnboundedSender<ApplyMsg>,
-    stop: Arc<AtomicBool>,
-    pool: Arc<ThreadPool>,
-}
-
-impl RaftEventHandler {
-    fn new(
-        me: usize,
-        peers: Vec<RaftClient>,
-        raft_core: Arc<RaftCore>,
-        apply_ch: UnboundedSender<ApplyMsg>,
-        stop: Arc<AtomicBool>,
-        pool: Arc<ThreadPool>,
-    ) -> RaftEventHandler {
-        RaftEventHandler {
-            me,
-            peers,
-            raft_core,
-            apply_ch,
-            stop,
-            pool,
-        }
-    }
-
-    fn handle(&self, event: RaftCoreEvent) {
-        match event {
-            RaftCoreEvent::AppendEntries { data } => self.on_append_entries(data),
-            RaftCoreEvent::CommitMessage { index, data } => self.on_commit_message(index, data),
-            RaftCoreEvent::BecomeCandidate {
-                was_candidate,
-                data,
-            } => self.on_become_candidate(!was_candidate, data),
-            RaftCoreEvent::BecomeFollower => self.on_become_follower(),
-            RaftCoreEvent::BecomeLeader => self.on_become_leader(),
-        }
-    }
-
-    fn on_become_leader(&self) {
-        let stop = self.stop.clone();
-        let raft = self.raft_core.clone();
-        let me = self.me;
-
-        self.pool.spawn_ok(async move {
-            info!("peer#{} - starting leader heartbeat loop", me);
-            loop {
-                let stop = stop.load(SeqCst);
-                let is_leader = raft.get_peer_status() == PeerStatus::Leader;
-                if stop || !is_leader {
-                    info!("peer#{} - stopping leader heartbeat loop", me);
-                    return;
-                }
-                raft.tick_append_entries();
-                Delay::new(get_heartbeat_delay()).await;
-            }
-        });
-    }
-
-    fn on_become_candidate(&self, spawn_timeout_loop: bool, data: RequestVoteData) {
-        if spawn_timeout_loop {
-            self.spawn_election_timeout_loop();
-        }
-        self.send_request_vote(data);
-    }
-
-    fn spawn_election_timeout_loop(&self) {
-        let stop = self.stop.clone();
-        let raft = self.raft_core.clone();
-        let me = self.me;
-
-        self.pool.spawn_ok(async move {
-            info!("peer#{} - starting election timeout loop", me);
-            loop {
-                let stop = stop.load(SeqCst);
-                let is_leader = raft.get_peer_status() == PeerStatus::Leader;
-                if stop || is_leader {
-                    info!("peer#{} - stopping election timeout loop", me);
-                    return;
-                }
-                let timeout = get_election_timeout();
-                Delay::new(timeout).await;
-                raft.check_election_timeout(timeout);
-            }
-        });
-    }
-
-    fn send_request_vote(&self, data: RequestVoteData) {
-        let term = data.term;
-
-        for i in 0..self.peers.len() {
-            if i == data.me {
-                continue;
-            }
-
-            let peer = &self.peers[i];
-            let raft_clone = self.raft_core.clone();
-            let peer_clone = peer.clone();
-
-            self.pool.spawn_ok(async move {
-                let args = RequestVoteArgs {
-                    term: data.term,
-                    candidate_id: data.me as u32,
-                    last_log_term: data.last_log_term,
-                    last_log_index: data.last_log_idx,
-                };
-                let result = peer_clone.request_vote(&args).await.map_err(Error::Rpc);
-                raft_clone.handle_request_vote_result(term, result);
-            });
-        }
-    }
-
-    fn on_become_follower(&self) {
-        self.spawn_election_timeout_loop();
-    }
-
-    fn on_commit_message(&self, index: u64, data: Vec<u8>) {
-        self.apply_ch
-            .unbounded_send(ApplyMsg::Command { data, index })
-            .unwrap();
-    }
-
-    fn on_append_entries(&self, data: AppendEntriesData) {
-        let peer = &self.peers[data.peer];
-        let raft_clone = self.raft_core.clone();
-        let peer_clone = peer.clone();
-
-        self.pool.spawn_ok(async move {
-            let entries: Vec<_> = data
-                .entries
-                .into_iter()
-                .map(|entry| EntryItem {
-                    term: entry.term,
-                    string_data: entry.string_data,
-                    data: entry.data,
-                    from_leader: entry.from_leader,
-                })
-                .collect();
-
-            // let entries_len = entries.len();
-
-            let term = data.term;
-            let match_index_to_set = data.match_index_to_set;
-
-            let args = AppendEntriesArgs {
-                term: data.term,
-                leader_id: data.me as u32,
-                entries,
-                leader_commit: data.leader_commit,
-                prev_log_idx: data.prev_log_index,
-                prev_log_term: data.prev_log_term,
-            };
-
-            let result = peer_clone
-                .append_entries(&args)
-                .await
-                .map_err(Error::Rpc)
-                .map(|r| AppendEntriesPeerReply {
-                    reply: r,
-                    request_term: term,
-                    match_index_to_set,
-                });
-
-            raft_clone.handle_append_entries_result(data.peer, result);
-        });
-    }
-}
-
 // Choose concurrency paradigm.
 //
 // You can either drive the raft state machine by the rpc framework,
@@ -560,11 +390,7 @@ impl Node {
         // Example:
         // self.raft.snapshot(index, snapshot)
         crate::your_code_here((index, snapshot));
-    }
-    
-    pub fn get_debug_state(&self) -> DebugState {
-        self.raft.raft_core.get_debug_state()
-    }
+    }    
 }
 
 #[async_trait::async_trait]

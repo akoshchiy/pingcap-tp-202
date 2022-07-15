@@ -8,11 +8,11 @@ use std::time::{Duration, SystemTime};
 use crate::proto::raftpb::*;
 use crate::raft::errors::Error::NotLeader;
 use crate::raft::errors::*;
+use crate::rlog::{raft_log, State, Topic};
 
 use super::persister::Persister;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(150);
-// pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(300);
 pub const ELECTION_TIMEOUT: Duration = Duration::from_millis(300);
 
 #[derive(Clone, Debug)]
@@ -80,7 +80,6 @@ pub struct PersistState {
 }
 
 pub struct RaftCore {
-    me: usize,
     inner: Mutex<InnerRaft>,
 }
 
@@ -128,24 +127,34 @@ impl InnerRaft {
             event_ch,
         }
     }
-    
+
+    fn log(&self, topic: Topic, msg: &str) {
+        let state = match self.status {
+            PeerStatus::Init => State::Init,
+            PeerStatus::Follower => State::Follower,
+            PeerStatus::Candidate => State::Candidate,
+            PeerStatus::Leader => State::Leader,
+        };
+
+        raft_log(topic, self.me, state, self.term, msg);
+    }
+
     fn update_term(&mut self, term: u64) {
-        if term != self.term {
-            self.term = term;
-            self.voted_for = Option::None;
-            self.vote_progress = Option::None;
+        if term == self.term {
+            return;
         }
+
+        self.term = term;
+        self.voted_for = Option::None;
+        self.vote_progress = Option::None;
+
+        self.log(Topic::State, format!("update term={}", term).as_str());
     }
 
     fn tick_append_entries(&mut self) {
         if self.status != PeerStatus::Leader {
             return;
         }
-
-        info!(
-            "peer#{} - tick append_entries, term: {}, next_index: {:?}",
-            self.me, self.term, self.next_index
-        );
 
         for i in 0..self.peers_count {
             if i == self.me {
@@ -177,22 +186,36 @@ impl InnerRaft {
         }
     }
 
-    fn handle_append_entries_reply(&mut self, peer: usize, peer_reply: AppendEntriesPeerReply) {
-        let reply = peer_reply.reply;
+    fn handle_append_entries_reply(
+        &mut self,
+        from_peer: usize,
+        request_term: u64,
+        match_idx_to_set: u64,
+        reply: AppendEntriesReply,
+    ) {
+        self.log(
+            Topic::Rpc,
+            format!(
+                "recv APPEND_ENTRIES_REPLY[S{},T={},s={},c_t={},c_idx={}](RT={},m_idx={})",
+                from_peer,
+                reply.term,
+                reply.success,
+                reply.conflicting_entry_term,
+                reply.conflicting_entry_idx,
+                request_term,
+                match_idx_to_set
+            )
+            .as_str(),
+        );
 
         if reply.term > self.term {
-            info!("peer#{} - append_entries reject, loosing leadership, peer:{}, reply.term: {}, my.term: {}",
-                self.me, peer, reply.term, self.term
-            );
             self.become_follower();
             self.update_term(reply.term);
             self.persist();
             return;
         }
 
-        if peer_reply.request_term != self.term {
-            info!("peer#{} - append_entries ignore, peer:{}, state: {:?}, req.term: {}, reply.term: {}, my.term: {}",
-                self.me, peer, self.status, peer_reply.request_term, reply.term, self.term);
+        if request_term != self.term {
             return;
         }
 
@@ -201,38 +224,19 @@ impl InnerRaft {
                 let idx = self
                     .log
                     .find_last_idx_for_term(reply.conflicting_entry_term);
-                self.next_index[peer] = if idx > 0 {
+                self.next_index[from_peer] = if idx > 0 {
                     idx + 1
                 } else {
                     reply.conflicting_entry_idx
                 };
             } else {
-                self.next_index[peer] = reply.conflicting_entry_idx;
+                self.next_index[from_peer] = reply.conflicting_entry_idx;
             }
-
-            // self.next_index[peer] = 1;
-
-            info!(
-                "peer#{} - append_entries response conflict, peer:{}, conflict_idx: {}, conflict_term: {}, set_index:{}, log: {}",
-                self.me,
-                peer,
-                reply.conflicting_entry_idx,
-                reply.conflicting_entry_term,
-                self.next_index[peer],
-                self.log
-            );
-
             return;
         }
 
-        // let next_idx = self.next_index[peer];
-        self.next_index[peer] = peer_reply.match_index_to_set + 1;
-        self.match_index[peer] = peer_reply.match_index_to_set;
-
-        info!(
-            "peer#{} - append_entries complete, peer: {}, next_index: {}",
-            self.me, peer, self.next_index[peer]
-        );
+        self.next_index[from_peer] = match_idx_to_set + 1;
+        self.match_index[from_peer] = match_idx_to_set;
 
         for i in self.commit_index + 1..=self.log.get_last_index() {
             let entry_term = self.log.get_entry(i).map(|e| e.term).unwrap_or(0);
@@ -273,37 +277,25 @@ impl InnerRaft {
 
         let dur_ms = duration_since.map(|d| d.as_millis()).unwrap_or(0);
 
-        info!(
-            "peer#{} - election timeout: {}, initiating new vote",
-            self.me, dur_ms
+        self.log(
+            Topic::Vote,
+            format!("election timeout: {}, initiating new vote", dur_ms).as_str(),
         );
 
         self.become_candidate();
     }
 
-    // fn check_election_timeout(&mut self, timeout: Duration) {
-    //     // if self.status != PeerStatus::Candidate || self.vote_progress.is_none() {
-    //     //     return;
-    //     // }
-
-    //     let started_at = self.vote_progress.as_mut().unwrap().started_at;
-    //     let duration_since = SystemTime::now().duration_since(started_at).unwrap();
-
-    //     if duration_since > ELECTION_TIMEOUT {
-    //         info!(
-    //             "peer#{} - vote election timeout, initiating new vote",
-    //             self.me
-    //         );
-    //         self.become_candidate();
-    //     }
-    // }
-
     fn handle_request_vote_request(&mut self, args: RequestVoteArgs) -> RequestVoteReply {
+        self.log(
+            Topic::Rpc,
+            format!(
+                "recv req REQUEST_VOTE[S{},T={},l_term={},l_idx={}]",
+                args.candidate_id, args.term, args.last_log_term, args.last_log_index
+            )
+            .as_str(),
+        );
+
         if args.term > self.term {
-            info!(
-                "peer#{} - request_vote, my term: {}, candidate_term: {}, become follower",
-                self.me, self.term, args.term
-            );
             self.become_follower();
             self.update_term(args.term);
         }
@@ -327,22 +319,14 @@ impl InnerRaft {
             vote_granted = true;
         }
 
-        info!(
-            "peer#{} - request_vote, my term: {}, candidate_term: {}, candidate_id: {}, \
-             last_log_idx: {}, last_log_term: {}, arg.last_log_idx: {}, arg.last_log_term: {}, \
-             matches_term: {}, already_voted: {}, not_expired_log: {} ==  {}",
-            self.me,
-            self.term,
-            args.term,
-            args.candidate_id,
-            last_log_idx,
-            last_log_term,
-            args.last_log_index,
-            args.last_log_term,
-            matches_term,
-            already_voted,
-            not_expired_log,
-            if vote_granted { "approve" } else { "reject" }
+        self.log(
+            Topic::Vote,
+            format!(
+                "{} to S{}",
+                if vote_granted { "approve" } else { "reject" },
+                args.candidate_id
+            )
+            .as_str(),
         );
 
         self.persist();
@@ -354,6 +338,20 @@ impl InnerRaft {
     }
 
     fn handle_append_entries_request(&mut self, args: AppendEntriesArgs) -> AppendEntriesReply {
+        self.log(
+            Topic::Rpc,
+            format!(
+                "recv APPEND_ENTRIES_ARGS[S{},T={},p_idx={},p_term={},l_commit={},e={}]",
+                args.leader_id,
+                args.term,
+                args.prev_log_idx,
+                args.prev_log_term,
+                args.leader_commit,
+                args.entries.len()
+            )
+            .as_str(),
+        );
+
         if args.term < self.term {
             return AppendEntriesReply {
                 term: self.term,
@@ -382,15 +380,6 @@ impl InnerRaft {
                 let new_commit_index = std::cmp::min(args.leader_commit, self.log.len());
                 self.apply_commit(new_commit_index);
             }
-        } else {
-            info!(
-                "peer#{} - append_entries conflict: {:?}, arg_prev_term: {}, arg_prev_idx: {}, logs: {}",
-                self.me,
-                conflict_entry.unwrap(),
-                args.prev_log_term,
-                args.prev_log_idx,
-                self.log
-            );
         }
 
         self.persist();
@@ -447,44 +436,49 @@ impl InnerRaft {
             entries,
         };
 
-        info!("peer#{} - replicate log entries: {}", self.me, &range);
+        self.log(
+            Topic::Log,
+            format!("replicate entries: {}", &range).as_str(),
+        );
         self.log.push_range(range);
     }
 
-    fn handle_request_vote_reply(&mut self, request_term: u64, reply: RequestVoteReply) {
+    fn handle_request_vote_reply(
+        &mut self,
+        from_peer: usize,
+        request_term: u64,
+        reply: RequestVoteReply,
+    ) {
+        self.log(
+            Topic::Rpc,
+            format!(
+                "recv REQUEST_VOTE_REPLY[S{}, T={}, v={}] (RT={})",
+                from_peer, reply.term, reply.vote_granted, request_term
+            )
+            .as_str(),
+        );
+
         if self.status != PeerStatus::Candidate || request_term != self.term {
+            self.log(Topic::Vote, "ignoring vote reply");
             return;
         }
 
         let progress = self.vote_progress.as_mut().unwrap();
+
         if !reply.vote_granted {
-            info!(
-                "peer#{} - received vote reject, my.term: {}, resp.term: {}",
-                self.me, self.term, reply.term
-            );
             progress.update(false);
             return;
         }
 
         progress.update(true);
         let count = progress.succeed_count();
-        info!(
-            "peer#{} - received vote approve, current: {}",
-            self.me, count
-        );
 
         if count >= self.quorum {
-            info!(
-                "peer#{} - received quorum approves, i am leader, term={}",
-                self.me, self.term
-            );
             self.become_leader();
         }
     }
 
     fn become_leader(&mut self) {
-        info!("peer#{}[{}] - become leader", self.me, self.term);
-
         self.status = PeerStatus::Leader;
 
         let last_index = self.log.get_last_index();
@@ -495,6 +489,9 @@ impl InnerRaft {
         }
         self.voted_for = Option::None;
         self.vote_progress = Option::None;
+
+        self.log(Topic::State, "become leader");
+
         self.send_event(RaftCoreEvent::BecomeLeader);
     }
 
@@ -502,24 +499,24 @@ impl InnerRaft {
         if self.status == PeerStatus::Follower {
             return;
         }
-        info!("peer#{}[{}] - become follower", self.me, self.term);
+
         self.status = PeerStatus::Follower;
         self.voted_for = Option::None;
         self.vote_progress = Option::None;
+
+        self.log(Topic::State, "become follower");
+
         self.send_event(RaftCoreEvent::BecomeFollower);
     }
 
     fn become_candidate(&mut self) {
         let was_candidate = self.status == PeerStatus::Candidate;
 
-        info!(
-            "peer#{}[{}] - become candidate, was_candidate: {}",
-            self.me, self.term, was_candidate
-        );
-
         self.status = PeerStatus::Candidate;
         self.term += 1;
         self.vote_progress = Option::Some(VoteProgress::new());
+
+        self.log(Topic::State, "become candidate");
 
         // self-vote
         self.voted_for = Some(self.me as u64);
@@ -543,18 +540,21 @@ impl InnerRaft {
         });
     }
 
-    fn handle_request_vote_error(&mut self, err: Error) {
+    fn handle_request_vote_error(&mut self, from_peer: usize, request_term: u64, err: Error) {
+        self.log(
+            Topic::RpcError,
+            format!(
+                "REQUEST_VOTE[S{}, RT={}], error: {}",
+                from_peer, request_term, err
+            )
+            .as_str(),
+        );
+
         if self.status != PeerStatus::Candidate {
             return;
         }
         let progress = self.vote_progress.as_mut().unwrap();
         progress.update(false);
-        warn!(
-            "peer#{} - request_vote[term={}] error resp: {}",
-            self.me,
-            self.term,
-            err.to_string()
-        );
     }
 
     fn append_log<M>(&mut self, data: Vec<u8>, msg: &M) -> (u64, u64)
@@ -569,9 +569,10 @@ impl InnerRaft {
         };
         self.log.append(entry);
         let index = self.log.len();
-        info!(
-            "peer#{} - append_log, term: {}, index: {}, entry: {:?}",
-            self.me, self.term, index, msg
+
+        self.log(
+            Topic::Client,
+            format!("append_log, idx: {}, entry: {:?}", index, msg).as_str(),
         );
         self.persist();
         (index, self.term)
@@ -592,6 +593,8 @@ impl InnerRaft {
         labcodec::encode(&state, &mut buf).unwrap();
 
         self.persister.save_raft_state(buf);
+
+        self.log(Topic::Persist, "save state");
     }
 
     fn restore(&mut self, data: &[u8]) {
@@ -599,6 +602,8 @@ impl InnerRaft {
         self.term = state.term;
         self.log = LogContainer::new(state.log);
         self.voted_for = state.voted_for;
+
+        self.log(Topic::Persist, "restore state");
     }
 
     fn apply_commit(&mut self, commit_index: u64) {
@@ -608,16 +613,12 @@ impl InnerRaft {
 
         self.commit_index = commit_index;
 
-        info!("peer#{} - apply_commit to index {}", self.me, commit_index);
-
         let mut states_to_apply = Vec::new();
 
         while self.commit_index > self.last_applied {
             let idx = self.last_applied + 1;
 
             let entry = self.log.get_entry(idx).unwrap();
-
-            // info!("peer#{} - apply_state index: {}", self.me, idx);
 
             states_to_apply.push(idx);
 
@@ -630,11 +631,14 @@ impl InnerRaft {
         }
 
         if !states_to_apply.is_empty() {
-            info!(
-                "peer#{} - apply_states: [{}..{}]",
-                self.me,
-                states_to_apply[0],
-                states_to_apply[states_to_apply.len() - 1]
+            self.log(
+                Topic::Log,
+                format!(
+                    "commit: [{}..{}]",
+                    states_to_apply[0],
+                    states_to_apply[states_to_apply.len() - 1]
+                )
+                .as_str(),
             );
         }
     }
@@ -643,7 +647,9 @@ impl InnerRaft {
         let res = self.event_ch.unbounded_send(event);
         match res {
             Ok(_) => {}
-            Err(err) => warn!("peer#{} - send_event err: {}", self.me, err),
+            Err(err) => {
+                self.log(Topic::Warn, format!("send_event err: {}", err).as_str());
+            }
         }
     }
 }
@@ -656,46 +662,84 @@ impl RaftCore {
         event_ch: UnboundedSender<RaftCoreEvent>,
     ) -> RaftCore {
         RaftCore {
-            me,
             inner: Mutex::new(InnerRaft::new(me, peers_count, persister, event_ch)),
         }
+    }
+
+    pub fn log(&self, topic: Topic, msg: &str) {
+        let inner = self.inner.lock().unwrap();
+        inner.log(topic, msg);
     }
 
     // request vote
     pub fn handle_request_vote_request(&self, args: RequestVoteArgs) -> RequestVoteReply {
         let mut inner = self.inner.lock().unwrap();
-        inner.handle_request_vote_request(args)
+        let reply = inner.handle_request_vote_request(args);
+
+        inner.log(
+            Topic::Rpc,
+            format!(
+                "send REQUEST_VOTE_REPLY[T={},v={}]",
+                reply.term, reply.vote_granted
+            )
+            .as_str(),
+        );
+
+        reply
     }
 
-    pub fn handle_request_vote_result(&self, request_term: u64, result: Result<RequestVoteReply>) {
+    pub fn handle_request_vote_result(
+        &self,
+        request_term: u64,
+        from_peer: usize,
+        result: Result<RequestVoteReply>,
+    ) {
         let mut inner = self.inner.lock().unwrap();
         match result {
-            Ok(reply) => inner.handle_request_vote_reply(request_term, reply),
-            Err(err) => inner.handle_request_vote_error(err),
+            Ok(reply) => inner.handle_request_vote_reply(from_peer, request_term, reply),
+            Err(err) => inner.handle_request_vote_error(from_peer, request_term, err),
         }
     }
 
     pub fn handle_append_entries_request(&self, args: AppendEntriesArgs) -> AppendEntriesReply {
         let mut inner = self.inner.lock().unwrap();
-        inner.handle_append_entries_request(args)
+        let reply = inner.handle_append_entries_request(args);
+
+        inner.log(
+            Topic::Rpc,
+            format!(
+                "send APPEND_ENTRIES_REPLY[T={},s={},c_t={},c_idx={}]",
+                reply.term,
+                reply.success,
+                reply.conflicting_entry_term,
+                reply.conflicting_entry_idx
+            )
+            .as_str(),
+        );
+
+        reply
     }
 
     pub fn handle_append_entries_result(
         &self,
-        peer: usize,
-        result: Result<AppendEntriesPeerReply>,
+        from_peer: usize,
+        request_term: u64,
+        match_idx_to_set: u64,
+        reply_result: Result<AppendEntriesReply>,
     ) {
         let mut inner = self.inner.lock().unwrap();
-        match result {
-            Ok(reply) => inner.handle_append_entries_reply(peer, reply),
-            Err(err) => {
-                warn!(
-                    "peer#{} - append_entries error, peer: {}, resp: {}",
-                    self.me,
-                    peer,
-                    err.to_string()
-                );
+        match reply_result {
+            Ok(reply) => {
+                inner.handle_append_entries_reply(from_peer, request_term, match_idx_to_set, reply)
             }
+            Err(err) => inner.log(
+                Topic::RpcError,
+                format!(
+                    "APPEND_ENTRIES[S{},RT={},m_idx={}]",
+                    from_peer, request_term, match_idx_to_set
+                )
+                .as_str(),
+            ),
         }
     }
 
@@ -714,11 +758,6 @@ impl RaftCore {
         let mut inner = self.inner.lock().unwrap();
         inner.tick_append_entries()
     }
-
-    // pub fn check_leader_heartbeat(&self) {
-    //     let mut inner = self.inner.lock().unwrap();
-    //     inner.check_leader_heartbeat()
-    // }
 
     pub fn check_election_timeout(&self, timeout: Duration) {
         let mut inner = self.inner.lock().unwrap();
@@ -750,25 +789,6 @@ impl RaftCore {
         let mut inner = self.inner.lock().unwrap();
         inner.become_follower();
     }
-
-    pub fn get_debug_state(&self) -> DebugState {
-        let inner = self.inner.lock().unwrap();
-        DebugState {
-            me: inner.me,
-            term: inner.term,
-            status: inner.status,
-            vote_progress: inner.vote_progress.is_some(),
-            last_idx: inner.log.get_last_index(),
-            last_applied: inner.last_applied,
-            commit_idx: inner.commit_index,
-        }
-    }
-}
-
-pub struct AppendEntriesPeerReply {
-    pub reply: AppendEntriesReply,
-    pub request_term: u64,
-    pub match_index_to_set: u64,
 }
 
 struct VoteProgress {
