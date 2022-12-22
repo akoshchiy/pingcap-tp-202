@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::future::{self, Future};
-use std::hash::Hash;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver};
@@ -12,7 +10,7 @@ use crate::proto::kvraftpb::*;
 use crate::raft::errors::Error::NotLeader;
 use crate::raft::{self, ApplyMsg};
 
-#[derive(Clone, PartialEq, Message)]
+#[derive(Clone, PartialEq, Eq, Message)]
 struct LogEntry {
     #[prost(string, tag = "1")]
     key: String,
@@ -45,13 +43,7 @@ pub struct KvServer {
 
 struct KvServerState {
     index: HashMap<String, String>,
-    request_channels: HashMap<u64, oneshot::Sender<LogEntry>>,
-}
-
-impl KvServerState {
-    fn add_request_ch(&mut self, idx: u64, ch: oneshot::Sender<LogEntry>) {
-        self.request_channels.insert(idx, ch);
-    }
+    request_channels: HashMap<u64, oneshot::Sender<WrappedLogEntry>>,
 }
 
 impl KvServer {
@@ -80,58 +72,32 @@ impl KvServer {
             })),
         };
 
-        pool.spawn_ok(server.read_apply_ch(apply_ch));
+        pool.spawn_ok(read_apply_ch(server.state.clone(), apply_ch));
 
         server
     }
 
-    fn state(&self) -> MutexGuard<KvServerState> {
+    fn kill(&self) {
+        self.rf.kill();
+    }
+
+    fn lock_state(&self) -> MutexGuard<KvServerState> {
         self.state.lock().unwrap()
     }
 
-    fn read_apply_ch(
-        &self,
-        apply_ch: UnboundedReceiver<ApplyMsg>,
-    ) -> impl Future<Output = ()> + Send + 'static {
-        let state = self.state.clone();
-
-        apply_ch.for_each(move |msg| match msg {
-            ApplyMsg::Command { data, index } => {
-                let entry = decode_data(&data);
-
-                let mut state = state.lock().unwrap();
-
-                
-
-                
-
-
-
-                state
-                    .request_channels
-                    .remove(&index)
-                    .map(|ch| ch.send(entry).unwrap());
-
-                future::ready(())
-            }
-            _ => future::ready(()),
-        })
+    fn add_request_ch(&self, idx: u64, ch: oneshot::Sender<WrappedLogEntry>) {
+        let mut state = self.lock_state();
+        state.request_channels.insert(idx, ch);
     }
 
-    // fn handle_apply_msg(&self, idx: u64, data: Vec<u8>) -> Result<()> {
-    //     let entry = decode_data(&data)?;
-    //     let mut state = self.state();
-    //     let request = state.requests.remove(&idx);
-    //     match request {
-    //         Some(state) => {
-    //             state.callback(&entry, &state.entry);
-    //         }
-    //         None => {}
-    //     }
-    //     Ok(())
-    // }
-
     async fn get(&self, arg: GetRequest) -> GetReply {
+        // let value = self
+        //     .lock_state()
+        //     .index
+        //     .get(&arg.key)
+        //     .map(|v| v.clone())
+        //     .unwrap_or("".to_owned());
+
         let entry = LogEntry {
             key: arg.key.clone(),
             value: None,
@@ -143,15 +109,9 @@ impl KvServer {
         let result = self.append_entry(entry).await;
 
         match result {
-            Ok(()) => {
-                let value = self
-                    .state()
-                    .index
-                    .get(&arg.key)
-                    .map(|v| v.clone())
-                    .unwrap_or("".to_owned());
+            Ok(entry) => {
                 GetReply {
-                    value,
+                    value: entry.value.unwrap_or_else(|| "".to_string()),
                     wrong_leader: false,
                     err: "".to_owned(),
                 }
@@ -198,7 +158,7 @@ impl KvServer {
         let result = self.append_entry(entry).await;
 
         match result {
-            Ok(()) => PutAppendReply {
+            Ok(_) => PutAppendReply {
                 wrong_leader: false,
                 err: "".to_string(),
             },
@@ -216,24 +176,85 @@ impl KvServer {
     }
 
     async fn append_entry(&self, entry: LogEntry) -> AppendEntryResult {
-        let (idx, term) = self.rf.start(&entry).map_err(|err| match err {
+        let (idx, _) = self.rf.start(&entry).map_err(|err| match err {
             NotLeader => AppendEntryError::NotLeader,
             _ => AppendEntryError::Other(err.to_string()),
         })?;
 
-        let mut state = self.state();
-
         let (sender, recv) = oneshot::channel();
-        state.add_request_ch(idx, sender);
-        drop(state);
+
+        self.add_request_ch(idx, sender);
 
         let recv_entry = recv.await.unwrap();
-        if entry != recv_entry {
+        if entry != recv_entry.entry {
             return AppendEntryResult::Err(AppendEntryError::NotLeader);
         }
 
-        AppendEntryResult::Ok(())
+        AppendEntryResult::Ok(recv_entry)
     }
+}
+
+async fn read_apply_ch(
+    state: Arc<Mutex<KvServerState>>,
+    mut apply_ch: UnboundedReceiver<ApplyMsg>,
+) {
+    while let Some(msg) = apply_ch.next().await {
+        match msg {
+            ApplyMsg::Command { data, index } => {
+                let mut state = state.lock().unwrap();
+                process_apply_command(&mut state, index, data);
+            },
+            _ => {},
+        }
+    }
+}
+
+fn process_apply_command(state: &mut KvServerState, index: u64, data: Vec<u8>) {
+    let entry = decode_data(&data);
+    let key = entry.key.clone();
+    let wrapped_entry = match entry.entry_type() {
+        EntryType::Get => {
+            WrappedLogEntry {
+                entry,
+                value: state.index.get(&key).map(|v| v.clone()),
+            }
+        },
+        EntryType::Put => {
+            state.index.insert(key, entry.value().to_string());
+            WrappedLogEntry {
+                entry,
+                value: None,
+            }
+        },
+        EntryType::Append => {
+            let entry_val = entry.value
+                .as_ref()
+                .map(|v| v.clone())
+                .unwrap_or_else(|| "".to_string());
+
+            let new_val = state.index
+                .get(&key)
+                .map(|v| std::format!("{}{}", v, entry_val))
+                .unwrap_or_else(|| entry_val);
+
+            state.index.insert(key, new_val);
+
+            WrappedLogEntry {
+                entry,
+                value: None
+            }
+        },
+    };
+
+    state.request_channels
+        .remove(&index)
+        .map(|ch| ch.send(wrapped_entry).unwrap());
+}
+
+#[derive(Debug)]
+struct WrappedLogEntry {
+    entry: LogEntry,
+    value: Option<String>,
 }
 
 enum AppendEntryError {
@@ -241,7 +262,7 @@ enum AppendEntryError {
     Other(String),
 }
 
-type AppendEntryResult = std::result::Result<(), AppendEntryError>;
+type AppendEntryResult = std::result::Result<WrappedLogEntry, AppendEntryError>;
 
 impl KvServer {
     /// Only for suppressing deadcode warnings.
@@ -278,8 +299,7 @@ pub struct Node {
 
 impl Node {
     pub fn new(kv: KvServer) -> Node {
-        // Your code here.
-        crate::your_code_here(kv);
+        Node { server: Arc::new(kv) }
     }
 
     /// the tester calls kill() when a KVServer instance won't
@@ -290,9 +310,7 @@ impl Node {
         // If you want to free some resources by `raft::Node::kill` method,
         // you should call `raft::Node::kill` here also to prevent resource leaking.
         // Since the test framework will call kvraft::Node::kill only.
-        // self.server.kill();
-
-        // Your code here, if desired.
+        self.server.kill();
     }
 
     /// The current term of this peer.
@@ -314,13 +332,17 @@ impl Node {
 impl KvService for Node {
     // CAVEATS: Please avoid locking or sleeping here, it may jam the network.
     async fn get(&self, arg: GetRequest) -> labrpc::Result<GetReply> {
-        // Your code here.
-        crate::your_code_here(arg)
+        info!("GET REQ s{} : {:?}", self.server.me, arg);
+        let reply = self.server.get(arg).await;
+        info!("GET REPLY s{} : {:?}", self.server.me, reply);
+        Ok(reply)
     }
 
     // CAVEATS: Please avoid locking or sleeping here, it may jam the network.
     async fn put_append(&self, arg: PutAppendRequest) -> labrpc::Result<PutAppendReply> {
-        // Your code here.
-        crate::your_code_here(arg)
+        info!("PUT_APPEND REQ s{} : {:?}", self.server.me, arg);
+        let reply = self.server.put_append(arg).await;
+        info!("PUT_APPEND REPLY s{} : {:?}", self.server.me, reply);
+        Ok(reply)
     }
 }

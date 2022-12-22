@@ -32,6 +32,9 @@ test_2d: cargo_test_2d
 test_3: test_3a test_3b
 
 test_3a: cargo_test_3a
+test_3a1: cargo_test_basic_3a
+test_3a2: cargo_test_concurrent_3a
+test_3a3: cargo_test_unreliable_3a
 
 test_3b: cargo_test_3b
 

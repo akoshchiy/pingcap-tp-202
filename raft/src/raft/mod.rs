@@ -102,21 +102,24 @@ impl Raft {
         let stop_clone = stop.clone();
         let pool_clone = pool.clone();
 
-        let event_handler = Arc::new(RaftEventHandler::new(
+        let event_handler = RaftEventHandler::new(
             peers.clone(),
             raft_core.clone(),
             apply_ch,
             stop_clone,
             pool_clone,
-        ));
+        );
         
         let stop_clone = stop.clone();
 
         pool.spawn_ok(async move {
             // info!("peer#{} - starting handler loop", me);
             while !stop_clone.load(SeqCst) {
-                let msg = receiver.next().await.unwrap();
-                event_handler.handle(msg);
+                let next = receiver.next().await;
+                if next.is_none() {
+                    return;
+                }
+                event_handler.handle(next.unwrap());
             }
             // info!("peer#{} - stopping handler loop", me);
         });
