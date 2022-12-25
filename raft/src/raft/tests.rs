@@ -728,7 +728,7 @@ fn test_persist3_2c() {
 // The leader in a new term may try to finish replicating log entries that
 // haven't been committed yet.
 #[test]
-fn test_figurre_8_2c() {
+fn test_figure_8_2c() {
     let servers = 5;
     let mut cfg = Config::new(servers);
 
@@ -1103,7 +1103,7 @@ fn internal_churn(unreliable: bool) {
 }
 
 #[test]
-fn test_rreliable_churn_2c() {
+fn test_reliable_churn_2c() {
     internal_churn(false);
 }
 

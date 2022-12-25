@@ -42,8 +42,9 @@ pub struct KvServer {
 }
 
 struct KvServerState {
-    index: HashMap<String, String>,
+    values: HashMap<String, String>,
     request_channels: HashMap<u64, oneshot::Sender<WrappedLogEntry>>,
+    client_op_seqs: HashMap<String, u64>,
 }
 
 impl KvServer {
@@ -67,8 +68,9 @@ impl KvServer {
             maxraftstate,
             // apply_ch,
             state: Arc::new(Mutex::new(KvServerState {
-                index: HashMap::new(),
+                values: HashMap::new(),
                 request_channels: HashMap::new(),
+                client_op_seqs: HashMap::new(),
             })),
         };
 
@@ -91,13 +93,6 @@ impl KvServer {
     }
 
     async fn get(&self, arg: GetRequest) -> GetReply {
-        // let value = self
-        //     .lock_state()
-        //     .index
-        //     .get(&arg.key)
-        //     .map(|v| v.clone())
-        //     .unwrap_or("".to_owned());
-
         let entry = LogEntry {
             key: arg.key.clone(),
             value: None,
@@ -212,39 +207,54 @@ async fn read_apply_ch(
 fn process_apply_command(state: &mut KvServerState, index: u64, data: Vec<u8>) {
     let entry = decode_data(&data);
     let key = entry.key.clone();
+
+    let client_id = entry.client_id.clone();
+    let seq_op = state.client_op_seqs.get(&client_id)
+        .map(|op| *op)
+        .unwrap_or(0);
+
+    let duplicate = seq_op >= entry.client_op_seq;
+
     let wrapped_entry = match entry.entry_type() {
         EntryType::Get => {
             WrappedLogEntry {
                 entry,
-                value: state.index.get(&key).map(|v| v.clone()),
+                value: state.values.get(&key).map(|v| v.clone()),
             }
         },
         EntryType::Put => {
-            state.index.insert(key, entry.value().to_string());
+            if !duplicate {
+                state.values.insert(key, entry.value().to_string());
+            }
             WrappedLogEntry {
                 entry,
                 value: None,
             }
         },
         EntryType::Append => {
-            let entry_val = entry.value
-                .as_ref()
-                .map(|v| v.clone())
-                .unwrap_or_else(|| "".to_string());
+            if !duplicate {
+                let entry_val = entry.value
+                    .as_ref()
+                    .map(|v| v.clone())
+                    .unwrap_or_else(|| "".to_string());
 
-            let new_val = state.index
-                .get(&key)
-                .map(|v| std::format!("{}{}", v, entry_val))
-                .unwrap_or_else(|| entry_val);
+                let new_val = state.values
+                    .get(&key)
+                    .map(|v| std::format!("{}{}", v, entry_val))
+                    .unwrap_or_else(|| entry_val);
 
-            state.index.insert(key, new_val);
-
+                state.values.insert(key, new_val);
+            }
             WrappedLogEntry {
                 entry,
                 value: None
             }
         },
     };
+
+    if !duplicate {
+        state.client_op_seqs.insert(client_id, seq_op);
+    }
 
     state.request_channels
         .remove(&index)

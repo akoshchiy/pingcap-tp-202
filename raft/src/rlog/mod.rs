@@ -52,5 +52,5 @@ pub fn raft_log(topic: Topic, server: usize, state: State, term: u64, msg: &str)
         .unwrap()
         .as_millis();
 
-    // println!("{} T{} S{} {} {} -- {}", time, term, server, state.to_string(), topic.to_string(), msg);
+    println!("{} T{} S{} {} {} -- {}", time, term, server, state.to_string(), topic.to_string(), msg);
 }
