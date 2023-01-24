@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering::AcqRel;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -13,6 +15,7 @@ const TTL: u64 = Duration::from_millis(100).as_nanos() as u64;
 
 #[derive(Clone, Default)]
 pub struct TimestampOracle {
+    time: Arc<AtomicU64>
     // You definitions here if needed.
 }
 
@@ -20,8 +23,10 @@ pub struct TimestampOracle {
 impl timestamp::Service for TimestampOracle {
     // example get_timestamp RPC handler.
     async fn get_timestamp(&self, _: TimestampRequest) -> labrpc::Result<TimestampResponse> {
-        // Your code here.
-        unimplemented!()
+        let time = self.time.fetch_add(1, AcqRel) + 1;
+        Ok(TimestampResponse { 
+            time
+        })
     }
 }
 
@@ -64,6 +69,8 @@ impl KvTable {
         ts_end_inclusive: Option<u64>,
     ) -> Option<(&Key, &Value)> {
         // Your code here.
+
+        
         unimplemented!()
     }
 

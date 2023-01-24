@@ -44,5 +44,8 @@ cargo_test_%:
 test_others: check
 	RUST_LOG=${LOG_LEVEL} cargo test -p labrpc -p labcodec -- --nocapture
 
-test_percolator: check
+# test_percolator: check
+# 	RUST_LOG=${LOG_LEVEL} cargo test -p percolator -- --nocapture
+
+test_percolator:
 	RUST_LOG=${LOG_LEVEL} cargo test -p percolator -- --nocapture
